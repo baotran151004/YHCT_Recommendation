@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
+import logo from "./assets/logo.png";
 import "./App.css";
 import {
   FaSearch,
@@ -44,6 +45,85 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [expandedId, setExpandedId] = useState(null);
 
+  // Autocomplete UI states
+  const [suggestions, setSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [suggestLoading, setSuggestLoading] = useState(false);
+  const [selectedIndex, setSelectedIndex] = useState(-1);
+  const searchWrapperRef = useRef(null);
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    if (selectedIndex >= 0 && dropdownRef.current) {
+      const activeItem = dropdownRef.current.querySelector('.autocomplete-item.active');
+      if (activeItem) {
+        activeItem.scrollIntoView({ block: 'nearest' });
+      }
+    }
+  }, [selectedIndex]);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (searchWrapperRef.current && !searchWrapperRef.current.contains(event.target)) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const getCurrentTerm = (fullText) => {
+    const parts = fullText.split(/[,;\n]+/);
+    return parts[parts.length - 1]; // Keep raw text
+  }
+
+  useEffect(() => {
+    const term = getCurrentTerm(symptom).trim();
+    if (!term) {
+      setSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+
+    const delayDebounceFn = setTimeout(async () => {
+      setSuggestLoading(true);
+      try {
+        const res = await fetch(`/suggest-symptoms?q=${encodeURIComponent(term)}`);
+        const data = await res.json();
+        setSuggestions(data);
+        setShowSuggestions(data.length > 0);
+        setSelectedIndex(-1);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setSuggestLoading(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [symptom]);
+
+  const handleSelectSuggestion = (suggestion) => {
+    const parts = symptom.split(/[,;\n]+/);
+    parts.pop(); // Remove the current incomplete term
+    
+    // Add the suggestion back
+    const newSymptom = parts.map(p => p.trim()).filter(Boolean).concat(suggestion).join(", ") + ", ";
+    setSymptom(newSymptom);
+    
+    setShowSuggestions(false);
+    setSelectedIndex(-1);
+  };
+
+  const highlightMatch = (text, term) => {
+    if (!term) return text;
+    const regex = new RegExp(`(${term})`, 'gi');
+    const parts = text.split(regex);
+    return parts.map((part, i) => 
+      regex.test(part) ? <strong key={i} className="text-highlight">{part}</strong> : part
+    );
+  };
+
   const handleSearch = async () => {
     if (!symptom.trim()) return;
 
@@ -70,27 +150,86 @@ function App() {
   return (
     <div className="container">
       <header className="header">
-        <h1>Hệ Thống Gợi Ý Bài Thuốc YHCT Việt Nam</h1>
-        <p>Gợi ý bài thuốc thông minh ứng dụng Biện chứng luận trị & Semantic AI.</p>
+        <img
+          src={logo}
+          alt="logo"
+          style={{
+            height: "100px",
+            borderRadius: "30px",
+            boxShadow: "0 4px 12px rgba(0,0,0,0.1)"
+          }}
+        />
+        <div>
+          <h1>Hệ Thống Gợi Ý Bài Thuốc Y học Cổ truyền Việt Nam</h1>
+          <p>Gợi ý bài thuốc thông minh ứng dụng Biện chứng luận trị & Semantic AI</p>
+        </div>
       </header>
 
-      <div className="search-wrapper">
+      <div className="search-wrapper" ref={searchWrapperRef}>
         <FaSearch className="search-icon" />
         <input
           value={symptom}
-          onChange={(e) => setSymptom(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+          onChange={(e) => {
+            setSymptom(e.target.value);
+            setShowSuggestions(true);
+            setSelectedIndex(-1);
+          }}
+          onClick={() => {
+            if (suggestions.length > 0) setShowSuggestions(true);
+          }}
+          onKeyDown={(e) => {
+            if (showSuggestions && suggestions.length > 0) {
+              if (e.key === "ArrowDown") {
+                e.preventDefault();
+                setSelectedIndex((prev) => (prev < suggestions.length - 1 ? prev + 1 : 0));
+              } else if (e.key === "ArrowUp") {
+                e.preventDefault();
+                setSelectedIndex((prev) => (prev > 0 ? prev - 1 : suggestions.length - 1));
+              } else if (e.key === "Enter") {
+                e.preventDefault();
+                if (selectedIndex >= 0 && selectedIndex < suggestions.length) {
+                  handleSelectSuggestion(suggestions[selectedIndex]);
+                } else {
+                  setShowSuggestions(false);
+                  handleSearch();
+                }
+              } else if (e.key === "Escape") {
+                setShowSuggestions(false);
+              }
+            } else if (e.key === "Enter") {
+              handleSearch();
+            }
+          }}
           placeholder="VD: gai gai rét, hắt xì, đau đau mỏi người, ho viêm họng..."
         />
         <button onClick={handleSearch} disabled={loading || !symptom.trim()}>
           Gợi ý
         </button>
+
+        {showSuggestions && (
+          <div className="autocomplete-dropdown" ref={dropdownRef}>
+            {suggestLoading ? (
+              <div className="autocomplete-loading">Đang tải gợi ý...</div>
+            ) : (
+              suggestions.map((item, idx) => (
+                <div 
+                  key={idx} 
+                  className={`autocomplete-item ${idx === selectedIndex ? "active" : ""}`}
+                  onClick={() => handleSelectSuggestion(item)}
+                  onMouseEnter={() => setSelectedIndex(idx)}
+                >
+                  {highlightMatch(item, getCurrentTerm(symptom).trim())}
+                </div>
+              ))
+            )}
+          </div>
+        )}
       </div>
 
       {loading && (
         <div className="loader-container">
           <div className="spinner"></div>
-          <p>Hệ thống đang phân tích triệu chứng qua Semantic AI...</p>
+          <p>Hệ thống đang phân tích triệu chứng...</p>
         </div>
       )}
 
@@ -255,9 +394,9 @@ function App() {
                         <div className="composition-grid">
                           {item.composition.map((herb, idx) => (
                             <div key={idx} className="herb-item">
-                              <img 
-                                src={herb.image || "https://placehold.co/60x60?text=No+Image"} 
-                                alt={herb.name} 
+                              <img
+                                src={herb.image || "https://placehold.co/60x60?text=No+Image"}
+                                alt={herb.name}
                                 onError={(e) => { e.target.src = "https://placehold.co/60x60?text=No+Image"; }}
                               />
                               <div className="herb-info">

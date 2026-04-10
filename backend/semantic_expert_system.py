@@ -158,6 +158,28 @@ class SemanticExpertSystemEngine:
         if not self.ready:
             raise RuntimeError("Semantic expert system knowledge base is empty.")
 
+    def suggest_symptoms(self, keyword: str, limit: int = 10) -> list[str]:
+        if not keyword or not keyword.strip():
+            return []
+            
+        normalized_keyword = normalize_text(keyword)
+        if not normalized_keyword:
+            return []
+
+        results = []
+        seen = set()
+
+        for entry in self.alias_entries:
+            if normalized_keyword in entry["semantic_text"]:
+                symptom_name = entry["symptom_name"]
+                if symptom_name not in seen:
+                    seen.add(symptom_name)
+                    results.append(symptom_name)
+                    if len(results) >= limit:
+                        break
+        
+        return results
+
     def _query_rows(self, db, sql: str, params: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         result = db.execute(text(sql), params or {})
         rows = [dict(row._mapping) for row in result.fetchall()]

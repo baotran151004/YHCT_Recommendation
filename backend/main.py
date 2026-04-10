@@ -40,6 +40,11 @@ def health_check() -> dict:
     }
 
 
+@app.get("/suggest-symptoms")
+def suggest_symptoms(q: str = ""):
+    return expert_engine.suggest_symptoms(q, limit=10)
+
+
 @app.get("/expert-system/recommend")
 def expert_system_inference(symptom: str, top_k: int = 1):
     if not symptom or not symptom.strip():
