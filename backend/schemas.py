@@ -1,9 +1,14 @@
 from pydantic import BaseModel
+from typing import Optional
 
-class UserRegister(BaseModel):
+class UserCreate(BaseModel):
     username: str
     password: str
     role: str = "doctor"
+
+class UserLogin(BaseModel):
+    username: str
+    password: str
 
 class Token(BaseModel):
     access_token: str

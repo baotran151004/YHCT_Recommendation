@@ -1,0 +1,14 @@
+fastapi
+uvicorn
+sqlalchemy
+pydantic
+slowapi
+psycopg2-binary
+passlib[bcrypt]
+python-jose[cryptography]
+python-multipart
+# Add any others found in previous turns or implied
+uuid
+typing
+# pyodbc is for local SQL Server, might be needed if not fully on postgres yet
+pyodbc
