@@ -186,6 +186,21 @@ class SemanticExpertSystemEngine:
             if fid in self.formulas:
                 self.principle_formulas[str(row["principle_id"])].append(self.formulas[fid])
 
+        # 7. Formula Components
+        raw_components = self._query_rows(db, """
+            SELECT fc.formula_id, hm.herb_name_vi, hm.image_url, fc.dosage_value, fc.dosage_unit, fc.dosage_note
+            FROM formulacomponent fc
+            JOIN herbmaterial hm ON hm.herb_id = fc.herb_id
+        """)
+        for row in raw_components:
+            self.formula_components[str(row["formula_id"])].append({
+                "name": row["herb_name_vi"],
+                "image": row["image_url"],
+                "dosage": row["dosage_value"],
+                "unit": row["dosage_unit"],
+                "note": row["dosage_note"]
+            })
+
     def _infer_tags(self, text: str) -> set:
         tags = set()
         norm_text = normalize_text(text)
@@ -200,25 +215,60 @@ class SemanticExpertSystemEngine:
         Calculates scores for patterns based on input symptoms and conflicts.
         """
         if not self.ready:
-            return {"error": "Expert system is not initialized."}
+            return []
         
         # 1. Tokenize and Match Symptoms
         input_parts = split_input_parts(input_text)
-        matched_symptoms = [] # List of {sid, score}
+        matched_symptoms = [] # List of {id, name, score, original, method}
         detected_user_tags = set()
+        normalized_symptoms_for_ui = []
 
         for part in input_parts:
             norm_part = normalize_text(part)
+            match_found = False
             # a. Match exact symptom
             if norm_part in self.alias_map:
                 sid = self.alias_map[norm_part]
-                score = EXACT_MATCH_POINTS if self.symptoms[sid]["norm"] == norm_part else ALIAS_MATCH_POINTS
-                matched_symptoms.append({"id": sid, "score": score, "original": part})
+                is_exact = self.symptoms[sid]["norm"] == norm_part
+                score = EXACT_MATCH_POINTS if is_exact else ALIAS_MATCH_POINTS
+                match_info = {
+                    "id": sid, 
+                    "name": self.symptoms[sid]["name"],
+                    "score": score, 
+                    "original": part,
+                    "method": "exact" if is_exact else "alias"
+                }
+                matched_symptoms.append(match_info)
+                normalized_symptoms_for_ui.append({
+                    "symptom_id": str(sid),
+                    "symptom_name": str(self.symptoms[sid]["name"]),
+                    "alias_used": str(part) if not is_exact else "None",
+                    "match_method": match_info["method"],
+                    "confidence": 1.0,
+                    "raw_inputs": [str(part)]
+                })
+                match_found = True
             # b. Partial match (keyword search)
             else:
                 for sid, data in self.symptoms.items():
                     if data["norm"] in norm_part or norm_part in data["norm"]:
-                        matched_symptoms.append({"id": sid, "score": ALIAS_MATCH_POINTS, "original": part})
+                        match_info = {
+                            "id": str(sid), 
+                            "name": str(data["name"]),
+                            "score": ALIAS_MATCH_POINTS, 
+                            "original": str(part),
+                            "method": "contains"
+                        }
+                        matched_symptoms.append(match_info)
+                        normalized_symptoms_for_ui.append({
+                            "symptom_id": str(sid),
+                            "symptom_name": str(data["name"]),
+                            "alias_used": "Keyword match",
+                            "match_method": "contains",
+                            "confidence": 0.8,
+                            "raw_inputs": [str(part)]
+                        })
+                        match_found = True
                         break
             
             # Detect patient tags (han, nhiet, etc)
@@ -229,12 +279,9 @@ class SemanticExpertSystemEngine:
         if not matched_symptoms:
             return []
 
-        # 2. Score Patterns
-        pattern_scores = []
-        user_sid_set = {m["id"] for m in matched_symptoms}
-
+        # 2. Score All Patterns and find Candidates
+        all_pattern_results = []
         for pid, pattern in self.patterns.items():
-            # Base match score
             pattern_matches = [m for m in matched_symptoms if m["id"] in pattern["symptom_weights"]]
             if not pattern_matches:
                 continue
@@ -243,70 +290,119 @@ class SemanticExpertSystemEngine:
             
             # Conflict Logic
             penalty = 0.0
+            conflicts_found = []
             for tag, conflicts in CONFLICT_TAGS.items():
                 if tag in detected_user_tags:
-                    # User has a tag (e.g. han). Is there a conflict in user's own symptoms?
                     if any(c in detected_user_tags for c in conflicts):
                         penalty += CONFLICT_PENALTY
-                    # Or does pattern conflict with user?
+                        conflicts_found.append(f"Internal conflict: {tag} vs {conflicts}")
                     if any(c in pattern["tags"] for c in conflicts):
                         penalty += CONFLICT_PENALTY
+                        conflicts_found.append(f"Pattern conflict: {tag} vs {pattern['tags']}")
             
-            # Bonus: fits many symptoms (> 50% of input or > 3 matches)
+            # Bonus
             bonus = 0.0
             if len(pattern_matches) / len(input_parts) >= 0.5 or len(pattern_matches) >= 3:
                 bonus = MULTI_MATCH_BONUS
             
             total_score = base_score + penalty + bonus
+            coverage = len(pattern_matches) / len(pattern["symptom_weights"]) if pattern["symptom_weights"] else 0
             
-            pattern_scores.append({
+            all_pattern_results.append({
                 "pattern": pattern,
-                "score": total_score,
-                "match_count": len(pattern_matches)
+                "score": round(total_score, 2),
+                "base_score": base_score,
+                "penalty": penalty,
+                "bonus": bonus,
+                "matches": pattern_matches,
+                "coverage": round(coverage, 2)
             })
 
-        if not pattern_scores:
+        if not all_pattern_results:
             return []
 
-        # 3. Rank and Select Top Result
-        pattern_scores.sort(key=lambda x: (x["score"], x["match_count"]), reverse=True)
-        best_p = pattern_scores[0]
+        # Rank and filter
+        all_pattern_results.sort(key=lambda x: (x["score"], len(x["matches"])), reverse=True)
         
-        if best_p["score"] < MINIMUM_SCORE_THRESHOLD:
-            return []
+        # Candidate patterns for UI
+        candidate_patterns = []
+        for res in all_pattern_results[:3]:
+            candidate_patterns.append({
+                "pattern_id": res["pattern"]["id"],
+                "pattern_name": res["pattern"]["name"],
+                "score": res["score"],
+                "chief_hits": len(res["matches"]),
+                "coverage": f"{int(res['coverage']*100)}%"
+            })
 
-        # 4. Find Formula
-        best_pattern = best_p["pattern"]
-        principles = self.pattern_principles.get(best_pattern["id"], [])
-        best_formula = None
-        best_principle = None
+        # Select top K results
+        results = []
+        for i in range(min(top_k, len(all_pattern_results))):
+            curr_p = all_pattern_results[i]
+            if curr_p["score"] < MINIMUM_SCORE_THRESHOLD and i > 0:
+                break
+                
+            best_pattern = curr_p["pattern"]
+            principles = self.pattern_principles.get(best_pattern["id"], [])
+            best_formula = None
+            
+            if principles:
+                best_principle = principles[0]
+                formulas = self.principle_formulas.get(best_principle["id"], [])
+                if formulas:
+                    best_formula = formulas[0]
 
-        if principles:
-            best_principle = principles[0]
-            formulas = self.principle_formulas.get(best_principle["id"], [])
-            if formulas:
-                best_formula = formulas[0]
+            if not best_formula:
+                continue
 
-        if not best_formula:
-            return []
+            # Full response object
+            matched_names = list(set(m["name"] for m in curr_p["matches"]))
+            reasoning_path = [
+                f"Phân tích {len(input_parts)} triệu chứng đầu vào.",
+                f"Phát hiện {len(curr_p['matches'])} triệu chứng khớp với bệnh cảnh '{best_pattern['name']}'.",
+                f"Điểm cơ sở: {curr_p['base_score']}"
+            ]
+            if curr_p["penalty"] < 0:
+                reasoning_path.append(f"Áp dụng trừ điểm mâu thuẫn: {curr_p['penalty']}")
+            if curr_p["bonus"] > 0:
+                reasoning_path.append(f"Cộng điểm ưu tiên do độ phủ cao: {curr_p['bonus']}")
+            
+            reasoning_path.append(f"Xác định phép trị: {best_formula['phep_tri']}")
+            reasoning_path.append(f"Đề xuất bài thuốc: {best_formula['name']}")
 
-        # 5. Format Explanation
-        explanation = f"Triệu chứng: {', '.join(input_parts)}\n"
-        explanation += f"→ thuộc thể: {best_pattern['name']}\n"
-        explanation += f"→ phép trị: {best_formula['phep_tri']}\n"
-        explanation += f"→ bài thuốc: {best_formula['name']}\n\n"
-        explanation += f"Lý do: Khớp {best_p['match_count']} triệu chứng cốt yếu. "
-        if best_p["score"] > base_score:
-            explanation += "Hệ thống xác định độ ưu tiên cao dựa trên sự phù hợp đa triệu chứng."
+            # Find missing symptoms (symptoms in pattern but not in input)
+            pattern_sid_set = set(best_pattern["symptom_weights"].keys())
+            matched_sid_set = set(m["id"] for m in curr_p["matches"])
+            missing_sids = pattern_sid_set - matched_sid_set
+            missing_names = [self.symptoms[sid]["name"] for sid in missing_sids if sid in self.symptoms]
 
-        # Return as a list (standard for recommend endpoints)
-        return [{
-            "formula": best_formula["name"],
-            "score": best_p["score"],
-            "explanation": explanation,
-            "pattern_name": best_pattern["name"],
-            "principle_name": best_formula['phep_tri']
-        }]
+            results.append({
+                "name": best_formula["name"],
+                "category": "Cổ phương",
+                "confidence": round(min(0.99, curr_p["score"] / 10.0), 2),
+                "score": curr_p["score"],
+                "coverage": curr_p["coverage"],
+                "pattern": best_pattern["name"],
+                "principle": best_formula["phep_tri"],
+                "indications": best_formula["indications"],
+                "usage": "Sắc uống ngày một thang. Chia 2-3 lần uống trong ngày.",
+                "explain": {
+                    "reasoning": f"Hệ thống xác định đây là bài thuốc phù hợp nhất vì khớp với {len(curr_p['matches'])} triệu chứng lâm sàng chính ({', '.join(matched_names[:3])}...).",
+                    "matched": matched_names,
+                    "missing": missing_names[:5]
+                },
+                "normalized_symptoms": normalized_symptoms_for_ui,
+                "composition": self.formula_components.get(best_formula["id"], []),
+                "candidate_patterns": candidate_patterns,
+                "reasoning_path": reasoning_path,
+                "priority_layers": [
+                    {"layer": "diagnostic", "label": "Biện chứng", "decision": best_pattern["name"], "rationale": f"Khớp {len(curr_p['matches'])} triệu chứng."},
+                    {"layer": "therapeutic", "label": "Pháp trị", "decision": best_formula["phep_tri"], "rationale": "Dựa trên thể bệnh đã xác định."}
+                ],
+                "modifier": {tag: True for tag in detected_user_tags}
+            })
+
+        return results
 
     def suggest_symptoms(self, q: str, limit: int = 10) -> List[dict]:
         """Simple prefix/contains match for UI autocomplete."""
@@ -316,7 +412,7 @@ class SemanticExpertSystemEngine:
         seen = set()
         for sid, data in self.symptoms.items():
             if norm_q in data["norm"]:
-                results.append({"symptom_id": sid, "symptom_name": data["name"]})
+                results.append({"symptom_id": str(sid), "symptom_name": str(data["name"])})
                 seen.add(sid)
                 if len(results) >= limit: break
         return results

@@ -44,6 +44,25 @@ function formatModifier(key) {
   return MODIFIER_LABELS[key.toLowerCase()] || key.toUpperCase();
 }
 
+/**
+ * Defensive utility to ensure React doesn't crash if an object is passed as a child.
+ */
+function safeRender(value) {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return value;
+  }
+  if (React.isValidElement(value)) return value;
+  
+  try {
+    // If it's an object with symptom keys, stringify its name or just show a warning string
+    if (value.symptom_name) return String(value.symptom_name);
+    return JSON.stringify(value);
+  } catch (e) {
+    return "[Invalid Render Object]";
+  }
+}
+
 function MainApp() {
   const { token, user, logout } = useAuth();
   const navigate = useNavigate();
@@ -86,6 +105,9 @@ function MainApp() {
 
   useEffect(() => {
     const term = getCurrentTerm(symptom).trim();
+    console.log("[[DEBUG]] Current symptom state:", symptom);
+    console.log("[[DEBUG]] Autocomplete term extracted:", `'${term}'`);
+
     if (!term) {
       setSuggestions([]);
       setShowSuggestions(false);
@@ -101,11 +123,18 @@ function MainApp() {
           }
         });
         const data = await res.json();
-        setSuggestions(data);
-        setShowSuggestions(data.length > 0);
+        console.log("[[DEBUG]] Suggestions API Response:", data);
+        
+        if (Array.isArray(data)) {
+          setSuggestions(data);
+          setShowSuggestions(data.length > 0);
+        } else {
+          console.warn("[[DEBUG]] suggestions data is not an array:", data);
+          setSuggestions([]);
+        }
         setSelectedIndex(-1);
       } catch (err) {
-        console.error(err);
+        console.error("[[DEBUG]] Suggest API error:", err);
       } finally {
         setSuggestLoading(false);
       }
@@ -127,12 +156,20 @@ function MainApp() {
   };
 
   const highlightMatch = (text, term) => {
-    if (!term) return text;
-    const regex = new RegExp(`(${term})`, 'gi');
-    const parts = safeSplit(text, regex);
-    return parts.map((part, i) => 
-      regex.test(part) ? <strong key={i} className="text-highlight">{part}</strong> : part
-    );
+    if (!text || typeof text !== 'string') return "";
+    if (!term || typeof term !== 'string') return text;
+    
+    try {
+      // Escape special characters in term for regex safety
+      const escapedTerm = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(`(${escapedTerm})`, 'gi');
+      const parts = safeSplit(text, regex);
+      return parts.map((part, i) => 
+        regex.test(part) ? <strong key={i} className="text-highlight">{part}</strong> : part
+      );
+    } catch (e) {
+      return text;
+    }
   };
 
   const handleSearch = async () => {
@@ -212,7 +249,7 @@ function MainApp() {
               } else if (e.key === "Enter") {
                 e.preventDefault();
                 if (selectedIndex >= 0 && selectedIndex < suggestions.length) {
-                  handleSelectSuggestion(suggestions[selectedIndex]);
+                  handleSelectSuggestion(suggestions[selectedIndex].symptom_name);
                 } else {
                   setShowSuggestions(false);
                   handleSearch();
@@ -230,7 +267,7 @@ function MainApp() {
           Gợi ý
         </button>
 
-        {showSuggestions && (
+        {showSuggestions && Array.isArray(suggestions) && (
           <div className="autocomplete-dropdown" ref={dropdownRef}>
             {suggestLoading ? (
               <div className="autocomplete-loading">Đang tải gợi ý...</div>
@@ -239,10 +276,10 @@ function MainApp() {
                 <div 
                   key={idx} 
                   className={`autocomplete-item ${idx === selectedIndex ? "active" : ""}`}
-                  onClick={() => handleSelectSuggestion(item)}
+                  onClick={() => handleSelectSuggestion(item?.symptom_name || "")}
                   onMouseEnter={() => setSelectedIndex(idx)}
                 >
-                  {highlightMatch(item, getCurrentTerm(symptom).trim())}
+                  {highlightMatch(item?.symptom_name || "", getCurrentTerm(symptom).trim())}
                 </div>
               ))
             )}
@@ -381,11 +418,11 @@ function MainApp() {
                       <div className="detail-content symptom-map">
                         {normalizedSymptoms.map((sym) => (
                           <div key={`${sym.symptom_id}-${sym.alias_used}`} className="symptom-map-item">
-                            <strong>{sym.symptom_name}</strong>
-                            <span>Alias match: {sym.alias_used}</span>
+                            <strong>{safeRender(sym?.symptom_name)}</strong>
+                            <span>Alias match: {safeRender(sym?.alias_used)}</span>
                             <span>Method: {formatMatchMethod(sym.match_method)}</span>
-                            <span>Confidence: {sym.confidence}</span>
-                            <span>Raw input: {(sym.raw_inputs || []).join(", ") || "N/A"}</span>
+                            <span>Confidence: {safeRender(sym?.confidence)}</span>
+                            <span>Raw input: {safeRender((sym.raw_inputs || []).join(", ")) || "N/A"}</span>
                           </div>
                         ))}
                       </div>
@@ -398,9 +435,9 @@ function MainApp() {
                       <div className="detail-content matched-list">
                         {matchedPatternSymptoms.map((sym) => (
                           <div key={`${sym.symptom_id}-${sym.symptom_name}`} className="matched-item">
-                            <strong>{sym.symptom_name}</strong>
-                            <span>Weight: {sym.weight}</span>
-                            <span>Contribution: {sym.contribution}</span>
+                            <strong>{safeRender(sym?.symptom_name)}</strong>
+                            <span>Weight: {safeRender(sym?.weight)}</span>
+                            <span>Contribution: {safeRender(sym?.contribution)}</span>
                             <span>Method: {formatMatchMethod(sym.match_method)}</span>
                           </div>
                         ))}
