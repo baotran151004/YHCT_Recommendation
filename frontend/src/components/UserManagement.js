@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 import { FaUserPlus, FaTrash, FaUserMd, FaUserShield, FaArrowLeft } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
+import { API_URL } from "../config";
 
 function UserManagement() {
   const { token, user } = useAuth();
@@ -20,7 +21,7 @@ function UserManagement() {
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      const res = await fetch("/admin/users", {
+      const res = await fetch(`${API_URL}/admin/users`, {
         headers: { "Authorization": `Bearer ${token}` }
       });
       if (res.ok) {
@@ -51,7 +52,7 @@ function UserManagement() {
     setError("");
 
     try {
-      const res = await fetch("/register", {
+      const res = await fetch(`${API_URL}/register`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -81,7 +82,7 @@ function UserManagement() {
     if (!window.confirm(`Bạn có chắc muốn xóa người dùng "${targetUsername}"?`)) return;
 
     try {
-      const res = await fetch(`/admin/users/${targetUserId}`, {
+      const res = await fetch(`${API_URL}/admin/users/${targetUserId}`, {
         method: "DELETE",
         headers: { "Authorization": `Bearer ${token}` }
       });

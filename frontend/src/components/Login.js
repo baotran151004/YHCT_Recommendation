@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import logo from '../assets/logo.png';
+import { API_URL } from '../config';
 
 const Login = () => {
   const [username, setUsername] = useState('');
@@ -27,7 +28,7 @@ const Login = () => {
       formData.append('username', username);
       formData.append('password', password);
 
-      const response = await fetch('/login', {
+      const response = await fetch(`${API_URL}/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',

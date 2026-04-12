@@ -13,6 +13,7 @@ import {
   FaUserShield,
 } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
+import { API_URL } from "../config";
 
 function formatAxis(value) {
   if (!value) return "N/A";
@@ -93,7 +94,7 @@ function MainApp() {
     const delayDebounceFn = setTimeout(async () => {
       setSuggestLoading(true);
       try {
-        const res = await fetch(`/suggest-symptoms?q=${encodeURIComponent(term)}`, {
+        const res = await fetch(`${API_URL}/suggest-symptoms?q=${encodeURIComponent(term)}`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -141,7 +142,7 @@ function MainApp() {
     setData([]);
 
     try {
-      const res = await fetch(`/expert-system/recommend?symptom=${encodeURIComponent(symptom)}&top_k=1`, {
+      const res = await fetch(`${API_URL}/expert-system/recommend?symptom=${encodeURIComponent(symptom)}&top_k=1`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
