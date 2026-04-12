@@ -153,14 +153,11 @@ def expert_system_inference(
     if not symptom or not symptom.strip():
         return []
 
-    if not expert_engine.ready:
-        raise HTTPException(
-            status_code=503, 
-            detail="Expert system is not ready. Check /health for details."
-        )
-
     # 1. Log search to console
     logger.info(f"User {current_user.username} searched: {symptom}")
+
+    if not expert_engine.ready:
+        logger.warning("Expert system is not fully ready. Attempting best-effort recommendation.")
 
     # 2. Auto-save search to database
     crud.save_search(db, user_id=current_user.user_id, query=symptom)

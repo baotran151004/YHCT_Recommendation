@@ -10,7 +10,7 @@ EXACT_MATCH_POINTS = 2.0
 ALIAS_MATCH_POINTS = 2.0
 CONFLICT_PENALTY = -5.0
 MULTI_MATCH_BONUS = 1.0
-MINIMUM_SCORE_THRESHOLD = 2.0
+MINIMUM_SCORE_THRESHOLD = 1.1
 
 CONFLICT_TAGS = {
     "han": ["nhiet"],
@@ -113,6 +113,8 @@ class SemanticExpertSystemEngine:
                     pattern["symptom_weights"][sid] = 1.0
                     count += 1
         logger.info(f"[EXPERT-SYSTEM] Derived {count} links using keyword matching.")
+        # Re-check readiness after derivation
+        self.ready = bool(self.symptoms and self.patterns and self.formulas)
 
     def _query_rows(self, db, sql: str, params: Optional[dict] = None) -> List[dict]:
         result = db.execute(text(sql), params or {})
@@ -341,8 +343,29 @@ class SemanticExpertSystemEngine:
                 "coverage": round(coverage, 2)
             })
 
+        # 2b. Fallback: If no patterns reach the high threshold but we have matches, 
+        # try a "Best effort" selection based just on match count.
+        is_best_effort = False
+        if not all_pattern_results and matched_symptoms:
+            logger.info("[INTERNAL-MATCH] No patterns met threshold. Swapping to best-effort mode.")
+            is_best_effort = True
+            for pid, pattern in self.patterns.items():
+                pattern_matches = [m for m in matched_symptoms if m["id"] in pattern["symptom_weights"]]
+                if pattern_matches:
+                    overlap_score = len(pattern_matches) / len(pattern["symptom_weights"]) if pattern["symptom_weights"] else 0
+                    all_pattern_results.append({
+                        "pattern": pattern,
+                        "score": 1.0 + overlap_score, # Minimal score to bypass threshold check later
+                        "base_score": overlap_score,
+                        "penalty": 0,
+                        "bonus": 0,
+                        "matches": pattern_matches,
+                        "coverage": round(overlap_score, 2)
+                    })
+            all_pattern_results.sort(key=lambda x: (len(x["matches"]), x["score"]), reverse=True)
+
         if not all_pattern_results:
-            logger.info("[INTERNAL-MATCH] No patterns matched.")
+            logger.info("[INTERNAL-MATCH] No patterns matched even in best-effort mode.")
             return []
 
         # Rank and filter

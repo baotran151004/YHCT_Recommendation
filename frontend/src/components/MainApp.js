@@ -105,8 +105,6 @@ function MainApp() {
 
   useEffect(() => {
     const term = getCurrentTerm(symptom).trim();
-    console.log("[[DEBUG]] Current symptom state:", symptom);
-    console.log("[[DEBUG]] Autocomplete term extracted:", `'${term}'`);
 
     if (!term) {
       setSuggestions([]);
@@ -123,18 +121,16 @@ function MainApp() {
           }
         });
         const data = await res.json();
-        console.log("[[DEBUG]] Suggestions API Response:", data);
         
         if (Array.isArray(data)) {
           setSuggestions(data);
           setShowSuggestions(data.length > 0);
         } else {
-          console.warn("[[DEBUG]] suggestions data is not an array:", data);
           setSuggestions([]);
         }
         setSelectedIndex(-1);
       } catch (err) {
-        console.error("[[DEBUG]] Suggest API error:", err);
+        console.error("Suggest API error:", err);
       } finally {
         setSuggestLoading(false);
       }
@@ -263,9 +259,12 @@ function MainApp() {
           }}
           placeholder="VD: gai gai rét, hắt xì, đau đau mỏi người, ho viêm họng..."
         />
-        <button onClick={handleSearch} disabled={loading || !symptom.trim()}>
-          Gợi ý
+        <button type="submit" className="search-button btn-primary" onClick={handleSearch} disabled={loading || !symptom.trim()}>
+          <FaPaperPlane /> {loading ? "Đang xử lý..." : "Gợi ý"}
         </button>
+        <div className="system-status">
+          <span className="dot ready"></span> Hệ thống chuyên gia đã sẵn sàng
+        </div>
 
         {showSuggestions && Array.isArray(suggestions) && (
           <div className="autocomplete-dropdown" ref={dropdownRef}>
@@ -294,9 +293,13 @@ function MainApp() {
         </div>
       )}
 
-      {!loading && symptom && data.length === 0 && (
-        <div className="empty">
-          <p>Chưa tìm thấy bài thuốc nào thật sự phù hợp. Vui lòng mô tả chi tiết và tự nhiên hơn các triệu chứng hiện tại.</p>
+      {!loading && !data.length && symptom && (
+        <div className="empty-state card animate-in">
+          <FaRegFrownOpen size={48} color="#94a3b8" />
+          <p>
+            Không tìm thấy bài thuốc chính xác cho các triệu chứng này. 
+            Bạn có thể thử nhập ít triệu chứng hơn hoặc sử dụng các từ khóa đơn giản.
+          </p>
         </div>
       )}
 
