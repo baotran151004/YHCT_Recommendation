@@ -266,10 +266,7 @@ function MainApp() {
         {data.map((item, index) => {
           const isExpanded = expandedId === index;
           const pattern = item.selected_pattern || {};
-          const principle = item.therapeutic_principle || {};
-          const axes = item.diagnostic_axes || {};
           const normalizedSymptoms = item.normalized_symptoms || [];
-          const modifiers = item.detected_modifiers || [];
           const priorityLayers = item.priority_layers || [];
           const candidatePatterns = item.candidate_patterns || [];
           const matchedPatternSymptoms = pattern.matched_symptoms || [];

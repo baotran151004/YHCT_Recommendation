@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useAuth } from "../context/AuthContext";
 import { FaUserPlus, FaTrash, FaUserMd, FaUserShield, FaArrowLeft } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
@@ -18,7 +18,7 @@ function UserManagement() {
   const [createLoading, setCreateLoading] = useState(false);
   const [success, setSuccess] = useState("");
 
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch(`${API_URL}/admin/users`, {
@@ -35,7 +35,7 @@ function UserManagement() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token]);
 
   useEffect(() => {
     if (user?.role !== "admin") {
@@ -43,7 +43,7 @@ function UserManagement() {
       return;
     }
     fetchUsers();
-  }, [token, user, navigate]);
+  }, [user, navigate, fetchUsers]);
 
   const handleCreateUser = async (e) => {
     e.preventDefault();
