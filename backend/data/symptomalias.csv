@@ -1,0 +1,71 @@
+﻿alias,symptom_id
+lạnh,15
+rét,15
+ớn lạnh,15
+sợ lạnh nhiều,15
+sợ gió lạnh,15
+nóng,11
+nóng người,11
+sốt cao,11
+sốt nhẹ,11
+nóng trong,11
+sốt về chiều,11
+ho nhiều,1
+ho liên tục,1
+ho khan,2
+ho có đờm,3
+ho về đêm,5
+ho lâu ngày,4
+thở gấp,8
+khó thở,7
+thở khò khè,9
+tức ngực,10
+đau đầu,25
+đau đầu dữ dội,26
+chóng mặt,27
+hoa mắt chóng mặt,27
+mất ngủ lâu ngày,29
+ngủ không ngon,30
+căng thẳng,32
+lo lắng,31
+hồi hộp,33
+đau bụng,35
+đau bụng âm ỉ,36
+đau bụng dữ dội,37
+đầy hơi,38
+chướng bụng,39
+ăn không ngon,40
+khó tiêu,41
+buồn nôn,42
+ói,42
+nôn,43
+tiêu chảy,45
+tiêu lỏng,48
+táo,47
+nổi ban,49
+phát ban đỏ,49
+ngứa da,50
+ngứa nhiều,51
+mụn,52
+da khô,53
+lưỡi trắng,57
+lưỡi vàng,58
+lưỡi đỏ,61
+lưỡi nhạt,62
+lưỡi khô,64
+mạch nhanh,68
+mạch chậm,69
+mạch yếu,72
+mạch mạnh,73
+đau lưng,74
+đau thắt lưng,75
+đau khớp,76
+đau khớp gối,77
+cứng khớp,78
+khát,86
+khô miệng,88
+miệng đắng,89
+ăn nhiều,90
+mệt,20
+mệt nhiều,20
+sụt cân,24
