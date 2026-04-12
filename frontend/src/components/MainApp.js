@@ -14,6 +14,7 @@ import {
 } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { API_URL } from "../config";
+import { safeSplit } from "../utils/helpers";
 
 function formatAxis(value) {
   if (!value) return "N/A";
@@ -79,8 +80,8 @@ function MainApp() {
   }, []);
 
   const getCurrentTerm = (fullText) => {
-    const parts = fullText.split(/[,;\n]+/);
-    return parts[parts.length - 1]; // Keep raw text
+    const parts = safeSplit(fullText, /[,;\n]+/);
+    return parts[parts.length - 1] || ""; // Keep raw text
   }
 
   useEffect(() => {
@@ -114,7 +115,7 @@ function MainApp() {
   }, [symptom, token]);
 
   const handleSelectSuggestion = (suggestion) => {
-    const parts = symptom.split(/[,;\n]+/);
+    const parts = safeSplit(symptom, /[,;\n]+/);
     parts.pop(); // Remove the current incomplete term
     
     // Add the suggestion back
@@ -128,7 +129,7 @@ function MainApp() {
   const highlightMatch = (text, term) => {
     if (!term) return text;
     const regex = new RegExp(`(${term})`, 'gi');
-    const parts = text.split(regex);
+    const parts = safeSplit(text, regex);
     return parts.map((part, i) => 
       regex.test(part) ? <strong key={i} className="text-highlight">{part}</strong> : part
     );
