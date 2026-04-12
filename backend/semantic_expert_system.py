@@ -194,7 +194,7 @@ class SemanticExpertSystemEngine:
                 tags.add(tag)
         return tags
 
-    def recommend(self, input_text: str) -> dict:
+    def recommend(self, input_text: str, top_k: int = 1) -> List[dict]:
         """
         Main entry point for recommendation.
         Calculates scores for patterns based on input symptoms and conflicts.
@@ -227,7 +227,7 @@ class SemanticExpertSystemEngine:
                     detected_user_tags.add(tag)
 
         if not matched_symptoms:
-            return {"error": "Không đủ dữ liệu để gợi ý chính xác"}
+            return []
 
         # 2. Score Patterns
         pattern_scores = []
@@ -266,14 +266,14 @@ class SemanticExpertSystemEngine:
             })
 
         if not pattern_scores:
-            return {"error": "Không đủ dữ liệu để gợi ý chính xác"}
+            return []
 
         # 3. Rank and Select Top Result
         pattern_scores.sort(key=lambda x: (x["score"], x["match_count"]), reverse=True)
         best_p = pattern_scores[0]
         
         if best_p["score"] < MINIMUM_SCORE_THRESHOLD:
-            return {"error": "Không đủ dữ liệu để gợi ý chính xác"}
+            return []
 
         # 4. Find Formula
         best_pattern = best_p["pattern"]
@@ -288,7 +288,7 @@ class SemanticExpertSystemEngine:
                 best_formula = formulas[0]
 
         if not best_formula:
-            return {"error": "Không tìm thấy bài thuốc phù hợp cho thể bệnh này"}
+            return []
 
         # 5. Format Explanation
         explanation = f"Triệu chứng: {', '.join(input_parts)}\n"
@@ -299,13 +299,14 @@ class SemanticExpertSystemEngine:
         if best_p["score"] > base_score:
             explanation += "Hệ thống xác định độ ưu tiên cao dựa trên sự phù hợp đa triệu chứng."
 
-        return {
+        # Return as a list (standard for recommend endpoints)
+        return [{
             "formula": best_formula["name"],
             "score": best_p["score"],
             "explanation": explanation,
             "pattern_name": best_pattern["name"],
             "principle_name": best_formula['phep_tri']
-        }
+        }]
 
     def suggest_symptoms(self, q: str, limit: int = 10) -> List[dict]:
         """Simple prefix/contains match for UI autocomplete."""
