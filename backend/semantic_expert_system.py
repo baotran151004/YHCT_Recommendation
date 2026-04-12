@@ -7,10 +7,10 @@ from sqlalchemy import text
 
 # System Constants
 EXACT_MATCH_POINTS = 2.0
-ALIAS_MATCH_POINTS = 1.0
-CONFLICT_PENALTY = -2.0
-MULTI_MATCH_BONUS = 3.0
-MINIMUM_SCORE_THRESHOLD = 3.0
+ALIAS_MATCH_POINTS = 2.0
+CONFLICT_PENALTY = -5.0
+MULTI_MATCH_BONUS = 1.0
+MINIMUM_SCORE_THRESHOLD = 2.0
 
 CONFLICT_TAGS = {
     "han": ["nhiet"],
@@ -101,13 +101,18 @@ class SemanticExpertSystemEngine:
         count = 0
         for pid, pattern in self.patterns.items():
             manifest = normalize_text(pattern["manifestations"])
+            manifest_plain = normalize_text(pattern["manifestations"], remove_accents=True)
             if not manifest: continue
             
             for sid, symptom in self.symptoms.items():
-                if symptom["norm"] in manifest:
+                s_norm = symptom["norm"]
+                s_plain = normalize_text(symptom["name"], remove_accents=True)
+                
+                # Match accented or plain versions
+                if s_norm in manifest or s_plain in manifest_plain:
                     pattern["symptom_weights"][sid] = 1.0
                     count += 1
-        print(f"[expert-system] Derived {count} links using keyword matching.")
+        logger.info(f"[EXPERT-SYSTEM] Derived {count} links using keyword matching.")
 
     def _query_rows(self, db, sql: str, params: Optional[dict] = None) -> List[dict]:
         result = db.execute(text(sql), params or {})
@@ -230,7 +235,7 @@ class SemanticExpertSystemEngine:
         detected_user_tags = set()
         normalized_symptoms_for_ui = []
 
-        print(f"[INTERNAL-MATCH] Processing input: '{input_text}'")
+        logger.info(f"[INTERNAL-MATCH] Processing input: '{input_text}'")
 
         for part in input_parts:
             # Try matching with accents first, then without
@@ -267,7 +272,7 @@ class SemanticExpertSystemEngine:
                     "confidence": 1.0 if is_exact else 0.9,
                     "raw_inputs": [str(part)]
                 })
-                print(f"[INTERNAL-MATCH] Found match: '{part}' -> {self.symptoms[sid]['name']} via {method}")
+                logger.info(f"[INTERNAL-MATCH] Found match: '{part}' -> {self.symptoms[sid]['name']} via {method}")
             else:
                 # b. Partial match (keyword search) fallback
                 for fallback_sid, data in self.symptoms.items():
@@ -288,7 +293,7 @@ class SemanticExpertSystemEngine:
                             "confidence": 0.8,
                             "raw_inputs": [str(part)]
                         })
-                        print(f"[INTERNAL-MATCH] Found keyword match: '{part}' -> {data['name']}")
+                        logger.info(f"[INTERNAL-MATCH] Found keyword match: '{part}' -> {data['name']}")
                         break
             
             # Detect patient tags (han, nhiet, etc)
@@ -297,7 +302,7 @@ class SemanticExpertSystemEngine:
                     detected_user_tags.add(tag)
 
         if not matched_symptoms:
-            print("[INTERNAL-MATCH] No symptoms matched.")
+            logger.info("[INTERNAL-MATCH] No symptoms matched.")
             return []
 
         # 2. Score All Patterns and find Candidates
@@ -337,7 +342,7 @@ class SemanticExpertSystemEngine:
             })
 
         if not all_pattern_results:
-            print("[INTERNAL-MATCH] No patterns matched.")
+            logger.info("[INTERNAL-MATCH] No patterns matched.")
             return []
 
         # Rank and filter
@@ -437,7 +442,7 @@ class SemanticExpertSystemEngine:
                 "selected_pattern": selected_pattern # Restored legacy field
             })
 
-        print(f"[INTERNAL-MATCH] Search complete. Returning {len(results)} results.")
+        logger.info(f"[INTERNAL-MATCH] Search complete. Returning {len(results)} results.")
         return results
 
     def suggest_symptoms(self, q: str, limit: int = 10) -> List[dict]:
