@@ -52,39 +52,37 @@ app.add_middleware(
 
 @app.on_event("startup")
 def startup_event() -> None:
-    print("\n" + "="*50)
-    print("[startup] Connecting to PostgreSQL (Railway)...")
+    logger.info("Initializing application startup...")
     
-    # 1. Create Tables (Base.metadata.create_all)
+    # 1. Create Tables
     try:
         Base.metadata.create_all(bind=engine)
-        print("[startup] Tables created / verified in PostgreSQL.")
+        logger.info("Database tables verified/created.")
     except Exception as exc:
-        print("[startup] CRITICAL: Error creating tables:")
+        logger.error(f"CRITICAL: Table creation failed: {exc}")
         traceback.print_exc()
         raise
 
-    # 2. Seed data if tables are empty
+    # 2. Seed data
     try:
         with SessionLocal() as db:
             seed_data(db)
     except Exception as exc:
-        print(f"[startup] WARNING: Error during seeding: {exc}")
+        logger.warning(f"Seeding skipped or failed: {exc}")
 
-    # 3. Load expert system after data is ready
-    print("[startup] Loading expert system data...")
+    # 3. Load expert system
     try:
         expert_engine.load(SessionLocal)
         if expert_engine.ready:
-            print("[startup] Expert system loaded successfully.")
+            logger.info("Expert system engine initialized and ready.")
         else:
-            print("[startup] WARNING: Expert system loaded but reported AS NOT READY.")
+            logger.warning("Expert system engine loaded but is NOT READY.")
     except Exception as exc:
-        print("[startup] ERROR: Expert system failed to load:")
+        logger.error(f"Expert system initialization failed: {exc}")
         traceback.print_exc()
         expert_engine.ready = False
 
-    print("="*50 + "\n")
+    logger.info("Application startup complete.")
 
 @app.get("/health")
 def health_check() -> dict:
