@@ -33,13 +33,16 @@ PATTERN_TAG_KEYWORDS = {
     "thuc": ["thuc", "uat", "tre", "be tac", "truong man", "ta thinh"],
 }
 
-def normalize_text(value: str) -> str:
+def normalize_text(value: str, remove_accents: bool = False) -> str:
     """Normalize Vietnamese text for consistent matching."""
     if not value:
         return ""
     lowered = value.lower().strip()
-    normalized = unicodedata.normalize("NFKD", lowered)
-    normalized = "".join(ch for ch in normalized if not unicodedata.combining(ch))
+    normalized = unicodedata.normalize("NFC", lowered)
+    if remove_accents:
+        normalized = unicodedata.normalize("NFKD", normalized)
+        normalized = "".join(ch for ch in normalized if not unicodedata.combining(ch))
+    
     normalized = re.sub(r"[^a-z0-9\s,;/+-]", " ", normalized)
     normalized = re.sub(r"\s+", " ", normalized)
     return normalized.strip()
@@ -120,13 +123,17 @@ class SemanticExpertSystemEngine:
             sid = str(row["symptom_id"])
             name = str(row["symptom_name"])
             self.symptoms[sid] = {"id": sid, "name": name, "norm": normalize_text(name)}
+            
+            # Populate alias map with both versions
             self.alias_map[normalize_text(name)] = sid
+            self.alias_map[normalize_text(name, remove_accents=True)] = sid
         
         raw_aliases = self._query_rows(db, "SELECT symptom_id, alias FROM symptomalias")
         for row in raw_aliases:
             sid = str(row["symptom_id"])
             alias = str(row["alias"])
             self.alias_map[normalize_text(alias)] = sid
+            self.alias_map[normalize_text(alias, remove_accents=True)] = sid
 
         # 2. Patterns
         raw_patterns = self._query_rows(db, "SELECT pattern_id, pattern_name_vi, clinical_manifestations FROM syndromepattern")
@@ -223,37 +230,50 @@ class SemanticExpertSystemEngine:
         detected_user_tags = set()
         normalized_symptoms_for_ui = []
 
+        print(f"[INTERNAL-MATCH] Processing input: '{input_text}'")
+
         for part in input_parts:
-            norm_part = normalize_text(part)
-            match_found = False
-            # a. Match exact symptom
-            if norm_part in self.alias_map:
-                sid = self.alias_map[norm_part]
-                is_exact = self.symptoms[sid]["norm"] == norm_part
+            # Try matching with accents first, then without
+            norm_accent = normalize_text(part)
+            norm_plain = normalize_text(part, remove_accents=True)
+            
+            sid = None
+            method = "none"
+            is_exact = False
+            
+            if norm_accent in self.alias_map:
+                sid = self.alias_map[norm_accent]
+                is_exact = (self.symptoms[sid]["norm"] == norm_accent)
+                method = "exact" if is_exact else "alias"
+            elif norm_plain in self.alias_map:
+                sid = self.alias_map[norm_plain]
+                method = "alias-plain"
+            
+            if sid:
                 score = EXACT_MATCH_POINTS if is_exact else ALIAS_MATCH_POINTS
                 match_info = {
-                    "id": sid, 
-                    "name": self.symptoms[sid]["name"],
+                    "id": str(sid), 
+                    "name": str(self.symptoms[sid]["name"]),
                     "score": score, 
-                    "original": part,
-                    "method": "exact" if is_exact else "alias"
+                    "original": str(part),
+                    "method": method
                 }
                 matched_symptoms.append(match_info)
                 normalized_symptoms_for_ui.append({
                     "symptom_id": str(sid),
                     "symptom_name": str(self.symptoms[sid]["name"]),
-                    "alias_used": str(part) if not is_exact else "None",
-                    "match_method": match_info["method"],
-                    "confidence": 1.0,
+                    "alias_used": str(part) if method != "exact" else "None",
+                    "match_method": method,
+                    "confidence": 1.0 if is_exact else 0.9,
                     "raw_inputs": [str(part)]
                 })
-                match_found = True
-            # b. Partial match (keyword search)
+                print(f"[INTERNAL-MATCH] Found match: '{part}' -> {self.symptoms[sid]['name']} via {method}")
             else:
-                for sid, data in self.symptoms.items():
-                    if data["norm"] in norm_part or norm_part in data["norm"]:
+                # b. Partial match (keyword search) fallback
+                for fallback_sid, data in self.symptoms.items():
+                    if data["norm"] in norm_accent or norm_accent in data["norm"]:
                         match_info = {
-                            "id": str(sid), 
+                            "id": str(fallback_sid), 
                             "name": str(data["name"]),
                             "score": ALIAS_MATCH_POINTS, 
                             "original": str(part),
@@ -261,22 +281,23 @@ class SemanticExpertSystemEngine:
                         }
                         matched_symptoms.append(match_info)
                         normalized_symptoms_for_ui.append({
-                            "symptom_id": str(sid),
+                            "symptom_id": str(fallback_sid),
                             "symptom_name": str(data["name"]),
                             "alias_used": "Keyword match",
                             "match_method": "contains",
                             "confidence": 0.8,
                             "raw_inputs": [str(part)]
                         })
-                        match_found = True
+                        print(f"[INTERNAL-MATCH] Found keyword match: '{part}' -> {data['name']}")
                         break
             
             # Detect patient tags (han, nhiet, etc)
             for tag, keywords in CANONICAL_AXIS_RULES.items():
-                if any(k in norm_part for k in keywords):
+                if any(k in norm_accent for k in keywords):
                     detected_user_tags.add(tag)
 
         if not matched_symptoms:
+            print("[INTERNAL-MATCH] No symptoms matched.")
             return []
 
         # 2. Score All Patterns and find Candidates
@@ -290,15 +311,12 @@ class SemanticExpertSystemEngine:
             
             # Conflict Logic
             penalty = 0.0
-            conflicts_found = []
             for tag, conflicts in CONFLICT_TAGS.items():
                 if tag in detected_user_tags:
                     if any(c in detected_user_tags for c in conflicts):
                         penalty += CONFLICT_PENALTY
-                        conflicts_found.append(f"Internal conflict: {tag} vs {conflicts}")
                     if any(c in pattern["tags"] for c in conflicts):
                         penalty += CONFLICT_PENALTY
-                        conflicts_found.append(f"Pattern conflict: {tag} vs {pattern['tags']}")
             
             # Bonus
             bonus = 0.0
@@ -319,6 +337,7 @@ class SemanticExpertSystemEngine:
             })
 
         if not all_pattern_results:
+            print("[INTERNAL-MATCH] No patterns matched.")
             return []
 
         # Rank and filter
@@ -376,6 +395,21 @@ class SemanticExpertSystemEngine:
             missing_sids = pattern_sid_set - matched_sid_set
             missing_names = [self.symptoms[sid]["name"] for sid in missing_sids if sid in self.symptoms]
 
+            # RESTORE WRAPPER FOR LEGACY FRONTEND COMPATIBILITY
+            selected_pattern = {
+                "id": best_pattern["id"],
+                "name": best_pattern["name"],
+                "matched_symptoms": [
+                    {
+                        "symptom_id": str(m["id"]),
+                        "symptom_name": str(m["name"]),
+                        "weight": 1.0, # Default if not specified
+                        "contribution": m["score"],
+                        "match_method": m["method"]
+                    } for m in curr_p["matches"]
+                ]
+            }
+
             results.append({
                 "name": best_formula["name"],
                 "category": "Cổ phương",
@@ -399,19 +433,27 @@ class SemanticExpertSystemEngine:
                     {"layer": "diagnostic", "label": "Biện chứng", "decision": best_pattern["name"], "rationale": f"Khớp {len(curr_p['matches'])} triệu chứng."},
                     {"layer": "therapeutic", "label": "Pháp trị", "decision": best_formula["phep_tri"], "rationale": "Dựa trên thể bệnh đã xác định."}
                 ],
-                "modifier": {tag: True for tag in detected_user_tags}
+                "modifier": {tag: True for tag in detected_user_tags},
+                "selected_pattern": selected_pattern # Restored legacy field
             })
 
+        print(f"[INTERNAL-MATCH] Search complete. Returning {len(results)} results.")
         return results
 
     def suggest_symptoms(self, q: str, limit: int = 10) -> List[dict]:
         """Simple prefix/contains match for UI autocomplete."""
         norm_q = normalize_text(q)
+        norm_q_plain = normalize_text(q, remove_accents=True)
+        
         if not norm_q: return []
         results = []
         seen = set()
         for sid, data in self.symptoms.items():
-            if norm_q in data["norm"]:
+            # Match accented or unaccented
+            s_norm = data["norm"]
+            s_plain = normalize_text(data["name"], remove_accents=True)
+            
+            if norm_q in s_norm or norm_q_plain in s_plain:
                 results.append({"symptom_id": str(sid), "symptom_name": str(data["name"])})
                 seen.add(sid)
                 if len(results) >= limit: break
