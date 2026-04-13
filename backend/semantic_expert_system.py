@@ -4,6 +4,9 @@ from collections import defaultdict
 from typing import Any, List, Dict, Optional
 
 from sqlalchemy import text
+import logging
+
+logger = logging.getLogger(__name__)
 
 # System Constants
 EXACT_MATCH_POINTS = 2.0
@@ -38,12 +41,16 @@ def normalize_text(value: str, remove_accents: bool = False) -> str:
     if not value:
         return ""
     lowered = value.lower().strip()
-    normalized = unicodedata.normalize("NFC", lowered)
-    if remove_accents:
-        normalized = unicodedata.normalize("NFKD", normalized)
-        normalized = "".join(ch for ch in normalized if not unicodedata.combining(ch))
     
-    normalized = re.sub(r"[^a-z0-9\s,;/+-]", " ", normalized)
+    if remove_accents:
+        normalized = unicodedata.normalize("NFKD", lowered)
+        normalized = "".join(ch for ch in normalized if not unicodedata.combining(ch))
+        normalized = normalized.replace("đ", "d")
+        normalized = re.sub(r"[^a-z0-9\s,;/+-]", " ", normalized)
+    else:
+        normalized = unicodedata.normalize("NFC", lowered)
+        normalized = re.sub(r"[^\w\s,;/+-]", " ", normalized)
+    
     normalized = re.sub(r"\s+", " ", normalized)
     return normalized.strip()
 
@@ -384,9 +391,10 @@ class SemanticExpertSystemEngine:
 
         # Select top K results
         results = []
-        for i in range(min(top_k, len(all_pattern_results))):
-            curr_p = all_pattern_results[i]
-            if curr_p["score"] < MINIMUM_SCORE_THRESHOLD and i > 0:
+        for curr_p in all_pattern_results:
+            if len(results) >= top_k:
+                break
+            if curr_p["score"] < MINIMUM_SCORE_THRESHOLD and len(results) > 0:
                 break
                 
             best_pattern = curr_p["pattern"]

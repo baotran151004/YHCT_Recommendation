@@ -1,31 +1,23 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Outfit:wght@300;400;600&display=swap');
 
 :root {
-  --primary: #10b981;
-  /* Emerald 500 */
-  --primary-dark: #059669;
-  /* Emerald 600 */
-  --primary-light: #d1fae5;
-  /* Emerald 100 */
-  --secondary: #3b82f6;
-  /* Blue 500 */
-  --accent: #f59e0b;
-  /* Amber 500 */
+  --primary: #2e7d32;
+  --primary-dark: #1b5e20;
+  --primary-light: #e8f5e9;
+  --secondary: #4caf50;
+  --accent: #81c784;
 
-  --bg-color: #f8fafc;
-  --bg-gradient: linear-gradient(135deg, #f0fdf4 0%, #e0f2fe 100%);
+  --bg-color: #f1f8e9;
+  --bg-gradient: linear-gradient(135deg, #f1f8e9 0%, #dcedc8 100%);
 
-  --text-main: #0f172a;
-  /* Slate 900 */
-  --text-muted: #64748b;
-  /* Slate 500 */
-  --text-light: #94a3b8;
-  /* Slate 400 */
+  --text-main: #2d3436;
+  --text-muted: #636e72;
+  --text-light: #b2bec3;
 
-  --card-bg: rgba(255, 255, 255, 0.75);
-  --card-border: rgba(255, 255, 255, 0.5);
-  --glass-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.08);
-  --glass-shadow-hover: 0 20px 40px -10px rgba(16, 185, 129, 0.15);
+  --card-bg: rgba(255, 255, 255, 0.85);
+  --card-border: rgba(46, 125, 50, 0.1);
+  --glass-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+  --glass-shadow-hover: 0 20px 45px rgba(0, 0, 0, 0.12);
 
   --radius-sm: 8px;
   --radius-md: 16px;
@@ -42,7 +34,7 @@
 
 body {
   margin: 0;
-  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
   background: var(--bg-gradient);
   background-attachment: fixed;
   color: var(--text-main);
