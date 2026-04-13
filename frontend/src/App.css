@@ -99,13 +99,11 @@ h6 {
   margin: 0 auto 3rem;
   display: flex;
   align-items: center;
-  background: var(--card-bg);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border-radius: var(--radius-xl);
-  padding: 10px 10px 10px 24px;
-  box-shadow: 0 15px 35px rgba(16, 185, 129, 0.08);
-  border: 1px solid var(--card-border);
+  background: #ffffff;
+  border-radius: 50px;
+  padding: 6px 6px 6px 20px;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(0, 0, 0, 0.02);
   transition: var(--transition-slow);
   z-index: 10;
   animation: slideUpFade 0.8s 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
@@ -115,13 +113,12 @@ h6 {
 
 .search-wrapper:focus-within {
   transform: translateY(-4px);
-  box-shadow: 0 25px 50px rgba(16, 185, 129, 0.15);
-  border-color: rgba(16, 185, 129, 0.3);
-  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 12px 30px rgba(75, 211, 158, 0.15);
+  border-color: rgba(75, 211, 158, 0.3);
 }
 
 .search-icon {
-  color: var(--primary);
+  color: #4bd39e;
   font-size: 1.25rem;
   margin-right: 12px;
 }
@@ -131,7 +128,7 @@ h6 {
   border: none;
   background: transparent;
   padding: 12px 10px;
-  font-size: 1.15rem;
+  font-size: 1.05rem;
   font-weight: 500;
   outline: none;
   font-family: inherit;
@@ -139,27 +136,28 @@ h6 {
 }
 
 .search-wrapper input::placeholder {
-  color: var(--text-light);
+  color: #a0aec0;
   font-weight: 400;
 }
 
 .search-wrapper button {
-  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  background: #4bd39e;
   color: white;
   border: none;
-  padding: 14px 32px;
-  border-radius: var(--radius-lg);
+  padding: 12px 30px;
+  border-radius: 50px;
   font-weight: 600;
   font-size: 1rem;
   letter-spacing: 0.5px;
   cursor: pointer;
-  transition: var(--transition);
-  box-shadow: 0 8px 20px rgba(16, 185, 129, 0.3);
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 10px rgba(75, 211, 158, 0.3);
 }
 
 .search-wrapper button:hover:not(:disabled) {
+  background: #3ac08c;
   transform: translateY(-2px);
-  box-shadow: 0 12px 25px rgba(16, 185, 129, 0.4);
+  box-shadow: 0 6px 15px rgba(75, 211, 158, 0.4);
 }
 
 .search-wrapper button:active:not(:disabled) {

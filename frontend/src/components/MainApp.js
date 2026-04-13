@@ -262,11 +262,8 @@ function MainApp() {
             placeholder="VD: gai gai rét, hắt xì, đau đau mỏi người, ho viêm họng..."
           />
           <button type="submit" className="search-button btn-primary" onClick={handleSearch} disabled={loading || !symptom.trim()}>
-            <FaPaperPlane /> {loading ? "Đang xử lý..." : "Gợi ý"}
+            {loading ? "Đang xử lý..." : "Gợi ý"}
           </button>
-          <div className="system-status">
-            <span className="dot ready"></span> Hệ thống chuyên gia đã sẵn sàng
-          </div>
 
           {showSuggestions && Array.isArray(suggestions) && (
             <div className="autocomplete-dropdown" ref={dropdownRef}>
