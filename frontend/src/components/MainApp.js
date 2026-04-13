@@ -373,79 +373,9 @@ function MainApp() {
                             <span className="meta-label">Phép trị</span>
                             <strong>{item.principle || "Chưa xác định"}</strong>
                           </div>
-                          <div className="summary-item">
-                            <span className="meta-label">Score</span>
-                            <strong>{item.score}</strong>
-                          </div>
-                          <div className="summary-item">
-                            <span className="meta-label">Coverage</span>
-                            <strong>{typeof item.coverage === 'number' ? (item.coverage * 100).toFixed(1) + '%' : (item.coverage ?? "N/A")}</strong>
-                          </div>
                         </div>
                       </div>
                     </div>
-
-
-                    {item.modifier && Object.keys(item.modifier).some(k => item.modifier[k]) && (
-                      <div className="detail-section">
-                        <h3><FaInfoCircle /> Modifier đã phát hiện</h3>
-                        <div className="detail-content pill-list">
-                          {Object.entries(item.modifier).filter(([k, v]) => v).map(([key, value]) => (
-                            <div key={key} className="pill">
-                              <strong>{formatModifier(key)}</strong>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {priorityLayers.length > 0 && (
-                      <div className="detail-section">
-                        <h3><FaInfoCircle /> Priority logic</h3>
-                        <div className="detail-content summary-grid">
-                          {priorityLayers.map((layer) => (
-                            <div key={layer.layer} className="summary-item">
-                              <span className="meta-label">{layer.label}</span>
-                              <strong>{formatAxis(layer.decision)}</strong>
-                              <span>{layer.rationale}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {normalizedSymptoms.length > 0 && (
-                      <div className="detail-section">
-                        <h3><FaInfoCircle /> Input đã chuẩn hóa</h3>
-                        <div className="detail-content symptom-map">
-                          {normalizedSymptoms.map((sym) => (
-                            <div key={`${sym.symptom_id}-${sym.alias_used}`} className="symptom-map-item">
-                              <strong>{safeRender(sym?.symptom_name)}</strong>
-                              <span>Alias match: {safeRender(sym?.alias_used)}</span>
-                              <span>Method: {formatMatchMethod(sym.match_method)}</span>
-                              <span>Confidence: {safeRender(sym?.confidence)}</span>
-                              <span>Raw input: {safeRender((sym.raw_inputs || []).join(", ")) || "N/A"}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {matchedPatternSymptoms.length > 0 && (
-                      <div className="detail-section">
-                        <h3><FaInfoCircle /> Symptom đóng góp vào pattern</h3>
-                        <div className="detail-content matched-list">
-                          {matchedPatternSymptoms.map((sym) => (
-                            <div key={`${sym.symptom_id}-${sym.symptom_name}`} className="matched-item">
-                              <strong>{safeRender(sym?.symptom_name)}</strong>
-                              <span>Weight: {safeRender(sym?.weight)}</span>
-                              <span>Contribution: {safeRender(sym?.contribution)}</span>
-                              <span>Method: {formatMatchMethod(sym.match_method)}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
 
                     <div className="detail-section">
                       <h3><FaLeaf /> Thành phần bài thuốc</h3>
@@ -484,35 +414,6 @@ function MainApp() {
                       <h3><FaInfoCircle /> Công dụng đầy đủ</h3>
                       <div className="detail-content">{item.indications}</div>
                     </div>
-
-                    {candidatePatterns.length > 0 && (
-                      <div className="detail-section">
-                        <h3><FaInfoCircle /> Pattern ứng viên</h3>
-                        <div className="detail-content candidate-patterns">
-                          {candidatePatterns.map((candidate) => (
-                            <div key={`${candidate.pattern_id}-${candidate.pattern_name}`} className="candidate-pattern-item">
-                              <strong>{candidate.pattern_name}</strong>
-                              <span>Score: {candidate.score}</span>
-                              <span>Chief hits: {candidate.chief_hits}</span>
-                              <span>Coverage: {candidate.coverage}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {item.reasoning_path?.length > 0 && (
-                      <div className="detail-section">
-                        <h3><FaInfoCircle /> Reasoning path</h3>
-                        <div className="detail-content">
-                          <ol className="reasoning-list">
-                            {item.reasoning_path.map((step, i) => (
-                              <li key={i}>{step}</li>
-                            ))}
-                          </ol>
-                        </div>
-                      </div>
-                    )}
 
                     {item.clinical_warnings?.length > 0 && (
                       <div className="warning-box">
