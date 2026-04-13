@@ -11,59 +11,11 @@ import {
   FaChevronDown,
   FaChevronUp,
   FaUserShield,
-  FaPaperPlane,
   FaRegFrownOpen,
 } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { API_URL } from "../config";
 import { safeSplit } from "../utils/helpers";
-
-function formatAxis(value) {
-  if (!value) return "N/A";
-  return value.replaceAll("_", " ");
-}
-
-function formatMatchMethod(value) {
-  if (!value) return "N/A";
-  if (value === "exact") return "Exact";
-  if (value === "contains") return "Contains";
-  if (value === "semantic") return "Semantic";
-  return value;
-}
-
-const MODIFIER_LABELS = {
-  han: "Hàn",
-  nhiet: "Nhiệt",
-  hu: "Hư",
-  thuc: "Thực",
-  dam: "Đàm",
-  tao: "Táo",
-  bieu: "Biểu",
-  ly: "Lý"
-};
-
-function formatModifier(key) {
-  return MODIFIER_LABELS[key.toLowerCase()] || key.toUpperCase();
-}
-
-/**
- * Defensive utility to ensure React doesn't crash if an object is passed as a child.
- */
-function safeRender(value) {
-  if (value === null || value === undefined) return "";
-  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
-    return value;
-  }
-  if (React.isValidElement(value)) return value;
-
-  try {
-    // If it's an object with symptom keys, stringify its name or just show a warning string
-    if (value.symptom_name) return String(value.symptom_name);
-    return JSON.stringify(value);
-  } catch (e) {
-    return "[Invalid Render Object]";
-  }
-}
 
 function MainApp() {
   const { token, user, logout } = useAuth();
@@ -305,11 +257,6 @@ function MainApp() {
         <div className="results-list">
           {data.map((item, index) => {
             const isExpanded = expandedId === index;
-            const pattern = item.selected_pattern || {};
-            const normalizedSymptoms = item.normalized_symptoms || [];
-            const priorityLayers = item.priority_layers || [];
-            const candidatePatterns = item.candidate_patterns || [];
-            const matchedPatternSymptoms = pattern.matched_symptoms || [];
 
             return (
               <div
