@@ -11,6 +11,8 @@ import {
   FaChevronDown,
   FaChevronUp,
   FaUserShield,
+  FaPaperPlane,
+  FaRegFrownOpen,
 } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { API_URL } from "../config";
@@ -53,7 +55,7 @@ function safeRender(value) {
     return value;
   }
   if (React.isValidElement(value)) return value;
-  
+
   try {
     // If it's an object with symptom keys, stringify its name or just show a warning string
     if (value.symptom_name) return String(value.symptom_name);
@@ -121,7 +123,7 @@ function MainApp() {
           }
         });
         const data = await res.json();
-        
+
         if (Array.isArray(data)) {
           setSuggestions(data);
           setShowSuggestions(data.length > 0);
@@ -142,11 +144,11 @@ function MainApp() {
   const handleSelectSuggestion = (suggestion) => {
     const parts = safeSplit(symptom, /[,;\n]+/);
     parts.pop(); // Remove the current incomplete term
-    
+
     // Add the suggestion back
     const newSymptom = parts.map(p => p.trim()).filter(Boolean).concat(suggestion).join(", ") + ", ";
     setSymptom(newSymptom);
-    
+
     setShowSuggestions(false);
     setSelectedIndex(-1);
   };
@@ -154,13 +156,13 @@ function MainApp() {
   const highlightMatch = (text, term) => {
     if (!text || typeof text !== 'string') return "";
     if (!term || typeof term !== 'string') return text;
-    
+
     try {
       // Escape special characters in term for regex safety
       const escapedTerm = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const regex = new RegExp(`(${escapedTerm})`, 'gi');
       const parts = safeSplit(text, regex);
-      return parts.map((part, i) => 
+      return parts.map((part, i) =>
         regex.test(part) ? <strong key={i} className="text-highlight">{part}</strong> : part
       );
     } catch (e) {
@@ -222,313 +224,313 @@ function MainApp() {
           </div>
         </header>
 
-      <div className="search-wrapper" ref={searchWrapperRef}>
-        <FaSearch className="search-icon" />
-        <input
-          value={symptom}
-          onChange={(e) => {
-            setSymptom(e.target.value);
-            setShowSuggestions(true);
-            setSelectedIndex(-1);
-          }}
-          onClick={() => {
-            if (suggestions.length > 0) setShowSuggestions(true);
-          }}
-          onKeyDown={(e) => {
-            if (showSuggestions && suggestions.length > 0) {
-              if (e.key === "ArrowDown") {
-                e.preventDefault();
-                setSelectedIndex((prev) => (prev < suggestions.length - 1 ? prev + 1 : 0));
-              } else if (e.key === "ArrowUp") {
-                e.preventDefault();
-                setSelectedIndex((prev) => (prev > 0 ? prev - 1 : suggestions.length - 1));
-              } else if (e.key === "Enter") {
-                e.preventDefault();
-                if (selectedIndex >= 0 && selectedIndex < suggestions.length) {
-                  handleSelectSuggestion(suggestions[selectedIndex].symptom_name);
-                } else {
+        <div className="search-wrapper" ref={searchWrapperRef}>
+          <FaSearch className="search-icon" />
+          <input
+            value={symptom}
+            onChange={(e) => {
+              setSymptom(e.target.value);
+              setShowSuggestions(true);
+              setSelectedIndex(-1);
+            }}
+            onClick={() => {
+              if (suggestions.length > 0) setShowSuggestions(true);
+            }}
+            onKeyDown={(e) => {
+              if (showSuggestions && suggestions.length > 0) {
+                if (e.key === "ArrowDown") {
+                  e.preventDefault();
+                  setSelectedIndex((prev) => (prev < suggestions.length - 1 ? prev + 1 : 0));
+                } else if (e.key === "ArrowUp") {
+                  e.preventDefault();
+                  setSelectedIndex((prev) => (prev > 0 ? prev - 1 : suggestions.length - 1));
+                } else if (e.key === "Enter") {
+                  e.preventDefault();
+                  if (selectedIndex >= 0 && selectedIndex < suggestions.length) {
+                    handleSelectSuggestion(suggestions[selectedIndex].symptom_name);
+                  } else {
+                    setShowSuggestions(false);
+                    handleSearch();
+                  }
+                } else if (e.key === "Escape") {
                   setShowSuggestions(false);
-                  handleSearch();
                 }
-              } else if (e.key === "Escape") {
-                setShowSuggestions(false);
+              } else if (e.key === "Enter") {
+                handleSearch();
               }
-            } else if (e.key === "Enter") {
-              handleSearch();
-            }
-          }}
-          placeholder="VD: gai gai rét, hắt xì, đau đau mỏi người, ho viêm họng..."
-        />
-        <button type="submit" className="search-button btn-primary" onClick={handleSearch} disabled={loading || !symptom.trim()}>
-          <FaPaperPlane /> {loading ? "Đang xử lý..." : "Gợi ý"}
-        </button>
-        <div className="system-status">
-          <span className="dot ready"></span> Hệ thống chuyên gia đã sẵn sàng
+            }}
+            placeholder="VD: gai gai rét, hắt xì, đau đau mỏi người, ho viêm họng..."
+          />
+          <button type="submit" className="search-button btn-primary" onClick={handleSearch} disabled={loading || !symptom.trim()}>
+            <FaPaperPlane /> {loading ? "Đang xử lý..." : "Gợi ý"}
+          </button>
+          <div className="system-status">
+            <span className="dot ready"></span> Hệ thống chuyên gia đã sẵn sàng
+          </div>
+
+          {showSuggestions && Array.isArray(suggestions) && (
+            <div className="autocomplete-dropdown" ref={dropdownRef}>
+              {suggestLoading ? (
+                <div className="autocomplete-loading">Đang tải gợi ý...</div>
+              ) : (
+                suggestions.map((item, idx) => (
+                  <div
+                    key={idx}
+                    className={`autocomplete-item ${idx === selectedIndex ? "active" : ""}`}
+                    onClick={() => handleSelectSuggestion(item?.symptom_name || "")}
+                    onMouseEnter={() => setSelectedIndex(idx)}
+                  >
+                    {highlightMatch(item?.symptom_name || "", getCurrentTerm(symptom).trim())}
+                  </div>
+                ))
+              )}
+            </div>
+          )}
         </div>
 
-        {showSuggestions && Array.isArray(suggestions) && (
-          <div className="autocomplete-dropdown" ref={dropdownRef}>
-            {suggestLoading ? (
-              <div className="autocomplete-loading">Đang tải gợi ý...</div>
-            ) : (
-              suggestions.map((item, idx) => (
-                <div 
-                  key={idx} 
-                  className={`autocomplete-item ${idx === selectedIndex ? "active" : ""}`}
-                  onClick={() => handleSelectSuggestion(item?.symptom_name || "")}
-                  onMouseEnter={() => setSelectedIndex(idx)}
-                >
-                  {highlightMatch(item?.symptom_name || "", getCurrentTerm(symptom).trim())}
-                </div>
-              ))
-            )}
+        {loading && (
+          <div className="loader-container">
+            <div className="spinner"></div>
+            <p>Hệ thống đang phân tích triệu chứng...</p>
           </div>
         )}
-      </div>
 
-      {loading && (
-        <div className="loader-container">
-          <div className="spinner"></div>
-          <p>Hệ thống đang phân tích triệu chứng...</p>
-        </div>
-      )}
+        {!loading && !data.length && symptom && (
+          <div className="empty-state card animate-in">
+            <FaRegFrownOpen size={48} color="#94a3b8" />
+            <p>
+              Không tìm thấy bài thuốc chính xác cho các triệu chứng này.
+              Bạn có thể thử nhập ít triệu chứng hơn hoặc sử dụng các từ khóa đơn giản.
+            </p>
+          </div>
+        )}
 
-      {!loading && !data.length && symptom && (
-        <div className="empty-state card animate-in">
-          <FaRegFrownOpen size={48} color="#94a3b8" />
-          <p>
-            Không tìm thấy bài thuốc chính xác cho các triệu chứng này. 
-            Bạn có thể thử nhập ít triệu chứng hơn hoặc sử dụng các từ khóa đơn giản.
-          </p>
-        </div>
-      )}
+        <div className="results-list">
+          {data.map((item, index) => {
+            const isExpanded = expandedId === index;
+            const pattern = item.selected_pattern || {};
+            const normalizedSymptoms = item.normalized_symptoms || [];
+            const priorityLayers = item.priority_layers || [];
+            const candidatePatterns = item.candidate_patterns || [];
+            const matchedPatternSymptoms = pattern.matched_symptoms || [];
 
-      <div className="results-list">
-        {data.map((item, index) => {
-          const isExpanded = expandedId === index;
-          const pattern = item.selected_pattern || {};
-          const normalizedSymptoms = item.normalized_symptoms || [];
-          const priorityLayers = item.priority_layers || [];
-          const candidatePatterns = item.candidate_patterns || [];
-          const matchedPatternSymptoms = pattern.matched_symptoms || [];
-
-          return (
-            <div
-              key={index}
-              className={`card ${isExpanded ? "expanded" : ""} ${index === 0 ? "best-match-highlight" : ""}`}
-              onClick={() => !isExpanded && toggleExpand(index)}
-            >
-              <div className="card-header">
-                <div>
-                  <span className="badge">{item.category}</span>
-                  <h2>{item.name}</h2>
-                </div>
-                {isExpanded ? (
-                  <FaChevronUp onClick={(e) => { e.stopPropagation(); toggleExpand(index); }} />
-                ) : (
-                  <FaChevronDown />
-                )}
-              </div>
-
-              <p className="card-brief">
-                <FaInfoCircle style={{ marginRight: "6px", color: "#81c784" }} />
-                {item.explain?.reasoning || item.indications}
-              </p>
-
-              <div className="card-footer">
-                <div>
-                  Khớp: <span className="confidence-tag">{item.explain?.matched?.join(", ") || "N/A"}</span>
-                </div>
-                <div>
-                  Độ tin cậy: <span className="confidence-tag">{typeof item.confidence === 'number' ? (item.confidence * 100).toFixed(1) + '%' : (item.confidence || "N/A")}</span>
-                </div>
-              </div>
-
-              {isExpanded && (
-                <div className="card-details">
-                  <div className="detail-section">
-                    <h3><FaInfoCircle /> Giải thích kết quả</h3>
-                    <div className="detail-content">{item.explain?.reasoning || "Chưa có lời giải thích."}</div>
+            return (
+              <div
+                key={index}
+                className={`card ${isExpanded ? "expanded" : ""} ${index === 0 ? "best-match-highlight" : ""}`}
+                onClick={() => !isExpanded && toggleExpand(index)}
+              >
+                <div className="card-header">
+                  <div>
+                    <span className="badge">{item.category}</span>
+                    <h2>{item.name}</h2>
                   </div>
-                  {item.explain?.missing?.length > 0 && (
-                    <div className="detail-section">
-                      <h3><FaInfoCircle /> Triệu chứng lâm sàng khác thường gặp (Thiếu)</h3>
-                      <div className="detail-content missing-symptoms">
-                        {item.explain.missing.map((sym, idx) => (
-                          <span key={idx} className="missing-symptom-tag">{sym}</span>
-                        ))}
-                      </div>
-                    </div>
+                  {isExpanded ? (
+                    <FaChevronUp onClick={(e) => { e.stopPropagation(); toggleExpand(index); }} />
+                  ) : (
+                    <FaChevronDown />
                   )}
+                </div>
 
+                <p className="card-brief">
+                  <FaInfoCircle style={{ marginRight: "6px", color: "#81c784" }} />
+                  {item.explain?.reasoning || item.indications}
+                </p>
 
-                  <div className="detail-section">
-                    <h3><FaInfoCircle /> Tổng hợp biện chứng</h3>
-                    <div className="detail-content">
-                      <div className="meta-grid">
-                        <div className="summary-item">
-                          <span className="meta-label">Pattern</span>
-                          <strong>{item.pattern || "Chưa xác định"}</strong>
-                        </div>
-                        <div className="summary-item">
-                          <span className="meta-label">Phép trị</span>
-                          <strong>{item.principle || "Chưa xác định"}</strong>
-                        </div>
-                        <div className="summary-item">
-                          <span className="meta-label">Score</span>
-                          <strong>{item.score}</strong>
-                        </div>
-                        <div className="summary-item">
-                          <span className="meta-label">Coverage</span>
-                          <strong>{typeof item.coverage === 'number' ? (item.coverage * 100).toFixed(1) + '%' : (item.coverage ?? "N/A")}</strong>
-                        </div>
-                      </div>
-                    </div>
+                <div className="card-footer">
+                  <div>
+                    Khớp: <span className="confidence-tag">{item.explain?.matched?.join(", ") || "N/A"}</span>
                   </div>
+                  <div>
+                    Độ tin cậy: <span className="confidence-tag">{typeof item.confidence === 'number' ? (item.confidence * 100).toFixed(1) + '%' : (item.confidence || "N/A")}</span>
+                  </div>
+                </div>
 
-
-                  {item.modifier && Object.keys(item.modifier).some(k => item.modifier[k]) && (
+                {isExpanded && (
+                  <div className="card-details">
                     <div className="detail-section">
-                      <h3><FaInfoCircle /> Modifier đã phát hiện</h3>
-                      <div className="detail-content pill-list">
-                        {Object.entries(item.modifier).filter(([k, v]) => v).map(([key, value]) => (
-                          <div key={key} className="pill">
-                            <strong>{formatModifier(key)}</strong>
+                      <h3><FaInfoCircle /> Giải thích kết quả</h3>
+                      <div className="detail-content">{item.explain?.reasoning || "Chưa có lời giải thích."}</div>
+                    </div>
+                    {item.explain?.missing?.length > 0 && (
+                      <div className="detail-section">
+                        <h3><FaInfoCircle /> Triệu chứng lâm sàng khác thường gặp (Thiếu)</h3>
+                        <div className="detail-content missing-symptoms">
+                          {item.explain.missing.map((sym, idx) => (
+                            <span key={idx} className="missing-symptom-tag">{sym}</span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+
+                    <div className="detail-section">
+                      <h3><FaInfoCircle /> Tổng hợp biện chứng</h3>
+                      <div className="detail-content">
+                        <div className="meta-grid">
+                          <div className="summary-item">
+                            <span className="meta-label">Pattern</span>
+                            <strong>{item.pattern || "Chưa xác định"}</strong>
                           </div>
-                        ))}
+                          <div className="summary-item">
+                            <span className="meta-label">Phép trị</span>
+                            <strong>{item.principle || "Chưa xác định"}</strong>
+                          </div>
+                          <div className="summary-item">
+                            <span className="meta-label">Score</span>
+                            <strong>{item.score}</strong>
+                          </div>
+                          <div className="summary-item">
+                            <span className="meta-label">Coverage</span>
+                            <strong>{typeof item.coverage === 'number' ? (item.coverage * 100).toFixed(1) + '%' : (item.coverage ?? "N/A")}</strong>
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  )}
 
-                  {priorityLayers.length > 0 && (
-                    <div className="detail-section">
-                      <h3><FaInfoCircle /> Priority logic</h3>
-                      <div className="detail-content summary-grid">
-                        {priorityLayers.map((layer) => (
-                          <div key={layer.layer} className="summary-item">
-                            <span className="meta-label">{layer.label}</span>
-                            <strong>{formatAxis(layer.decision)}</strong>
-                            <span>{layer.rationale}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
 
-                  {normalizedSymptoms.length > 0 && (
-                    <div className="detail-section">
-                      <h3><FaInfoCircle /> Input đã chuẩn hóa</h3>
-                      <div className="detail-content symptom-map">
-                        {normalizedSymptoms.map((sym) => (
-                          <div key={`${sym.symptom_id}-${sym.alias_used}`} className="symptom-map-item">
-                            <strong>{safeRender(sym?.symptom_name)}</strong>
-                            <span>Alias match: {safeRender(sym?.alias_used)}</span>
-                            <span>Method: {formatMatchMethod(sym.match_method)}</span>
-                            <span>Confidence: {safeRender(sym?.confidence)}</span>
-                            <span>Raw input: {safeRender((sym.raw_inputs || []).join(", ")) || "N/A"}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {matchedPatternSymptoms.length > 0 && (
-                    <div className="detail-section">
-                      <h3><FaInfoCircle /> Symptom đóng góp vào pattern</h3>
-                      <div className="detail-content matched-list">
-                        {matchedPatternSymptoms.map((sym) => (
-                          <div key={`${sym.symptom_id}-${sym.symptom_name}`} className="matched-item">
-                            <strong>{safeRender(sym?.symptom_name)}</strong>
-                            <span>Weight: {safeRender(sym?.weight)}</span>
-                            <span>Contribution: {safeRender(sym?.contribution)}</span>
-                            <span>Method: {formatMatchMethod(sym.match_method)}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="detail-section">
-                    <h3><FaLeaf /> Thành phần bài thuốc</h3>
-                    <div className="detail-content">
-                      {Array.isArray(item.composition) ? (
-                        <div className="composition-grid">
-                          {item.composition.map((herb, idx) => (
-                            <div key={idx} className="herb-item">
-                              <img
-                                src={herb.image || "https://placehold.co/60x60?text=No+Image"}
-                                alt={herb.name}
-                                onError={(e) => { e.target.src = "https://placehold.co/60x60?text=No+Image"; }}
-                              />
-                              <div className="herb-info">
-                                <span className="herb-name">{herb.name}</span>
-                                <span className="herb-dosage">
-                                  {herb.dosage} {herb.unit}
-                                  {herb.note && <span className="herb-note"> ({herb.note})</span>}
-                                </span>
-                              </div>
+                    {item.modifier && Object.keys(item.modifier).some(k => item.modifier[k]) && (
+                      <div className="detail-section">
+                        <h3><FaInfoCircle /> Modifier đã phát hiện</h3>
+                        <div className="detail-content pill-list">
+                          {Object.entries(item.modifier).filter(([k, v]) => v).map(([key, value]) => (
+                            <div key={key} className="pill">
+                              <strong>{formatModifier(key)}</strong>
                             </div>
                           ))}
                         </div>
-                      ) : (
-                        item.composition
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="detail-section">
-                    <h3><FaFlask /> Cách dùng và liều lượng</h3>
-                    <div className="detail-content">{item.usage}</div>
-                  </div>
-
-                  <div className="detail-section">
-                    <h3><FaInfoCircle /> Công dụng đầy đủ</h3>
-                    <div className="detail-content">{item.indications}</div>
-                  </div>
-
-                  {candidatePatterns.length > 0 && (
-                    <div className="detail-section">
-                      <h3><FaInfoCircle /> Pattern ứng viên</h3>
-                      <div className="detail-content candidate-patterns">
-                        {candidatePatterns.map((candidate) => (
-                          <div key={`${candidate.pattern_id}-${candidate.pattern_name}`} className="candidate-pattern-item">
-                            <strong>{candidate.pattern_name}</strong>
-                            <span>Score: {candidate.score}</span>
-                            <span>Chief hits: {candidate.chief_hits}</span>
-                            <span>Coverage: {candidate.coverage}</span>
-                          </div>
-                        ))}
                       </div>
-                    </div>
-                  )}
+                    )}
 
-                  {item.reasoning_path?.length > 0 && (
-                    <div className="detail-section">
-                      <h3><FaInfoCircle /> Reasoning path</h3>
-                      <div className="detail-content">
-                        <ol className="reasoning-list">
-                          {item.reasoning_path.map((step, i) => (
-                            <li key={i}>{step}</li>
+                    {priorityLayers.length > 0 && (
+                      <div className="detail-section">
+                        <h3><FaInfoCircle /> Priority logic</h3>
+                        <div className="detail-content summary-grid">
+                          {priorityLayers.map((layer) => (
+                            <div key={layer.layer} className="summary-item">
+                              <span className="meta-label">{layer.label}</span>
+                              <strong>{formatAxis(layer.decision)}</strong>
+                              <span>{layer.rationale}</span>
+                            </div>
                           ))}
-                        </ol>
+                        </div>
+                      </div>
+                    )}
+
+                    {normalizedSymptoms.length > 0 && (
+                      <div className="detail-section">
+                        <h3><FaInfoCircle /> Input đã chuẩn hóa</h3>
+                        <div className="detail-content symptom-map">
+                          {normalizedSymptoms.map((sym) => (
+                            <div key={`${sym.symptom_id}-${sym.alias_used}`} className="symptom-map-item">
+                              <strong>{safeRender(sym?.symptom_name)}</strong>
+                              <span>Alias match: {safeRender(sym?.alias_used)}</span>
+                              <span>Method: {formatMatchMethod(sym.match_method)}</span>
+                              <span>Confidence: {safeRender(sym?.confidence)}</span>
+                              <span>Raw input: {safeRender((sym.raw_inputs || []).join(", ")) || "N/A"}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {matchedPatternSymptoms.length > 0 && (
+                      <div className="detail-section">
+                        <h3><FaInfoCircle /> Symptom đóng góp vào pattern</h3>
+                        <div className="detail-content matched-list">
+                          {matchedPatternSymptoms.map((sym) => (
+                            <div key={`${sym.symptom_id}-${sym.symptom_name}`} className="matched-item">
+                              <strong>{safeRender(sym?.symptom_name)}</strong>
+                              <span>Weight: {safeRender(sym?.weight)}</span>
+                              <span>Contribution: {safeRender(sym?.contribution)}</span>
+                              <span>Method: {formatMatchMethod(sym.match_method)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="detail-section">
+                      <h3><FaLeaf /> Thành phần bài thuốc</h3>
+                      <div className="detail-content">
+                        {Array.isArray(item.composition) ? (
+                          <div className="composition-grid">
+                            {item.composition.map((herb, idx) => (
+                              <div key={idx} className="herb-item">
+                                <img
+                                  src={herb.image || "https://placehold.co/60x60?text=No+Image"}
+                                  alt={herb.name}
+                                  onError={(e) => { e.target.src = "https://placehold.co/60x60?text=No+Image"; }}
+                                />
+                                <div className="herb-info">
+                                  <span className="herb-name">{herb.name}</span>
+                                  <span className="herb-dosage">
+                                    {herb.dosage} {herb.unit}
+                                    {herb.note && <span className="herb-note"> ({herb.note})</span>}
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          item.composition
+                        )}
                       </div>
                     </div>
-                  )}
 
-                  {item.clinical_warnings?.length > 0 && (
-                    <div className="warning-box">
-                      <strong><FaExclamationTriangle /> Lưu ý đặc biệt :</strong>
-                      <ul>
-                        {item.clinical_warnings.map((warning, i) => <li key={i}>{warning}</li>)}
-                      </ul>
+                    <div className="detail-section">
+                      <h3><FaFlask /> Cách dùng và liều lượng</h3>
+                      <div className="detail-content">{item.usage}</div>
                     </div>
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+
+                    <div className="detail-section">
+                      <h3><FaInfoCircle /> Công dụng đầy đủ</h3>
+                      <div className="detail-content">{item.indications}</div>
+                    </div>
+
+                    {candidatePatterns.length > 0 && (
+                      <div className="detail-section">
+                        <h3><FaInfoCircle /> Pattern ứng viên</h3>
+                        <div className="detail-content candidate-patterns">
+                          {candidatePatterns.map((candidate) => (
+                            <div key={`${candidate.pattern_id}-${candidate.pattern_name}`} className="candidate-pattern-item">
+                              <strong>{candidate.pattern_name}</strong>
+                              <span>Score: {candidate.score}</span>
+                              <span>Chief hits: {candidate.chief_hits}</span>
+                              <span>Coverage: {candidate.coverage}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {item.reasoning_path?.length > 0 && (
+                      <div className="detail-section">
+                        <h3><FaInfoCircle /> Reasoning path</h3>
+                        <div className="detail-content">
+                          <ol className="reasoning-list">
+                            {item.reasoning_path.map((step, i) => (
+                              <li key={i}>{step}</li>
+                            ))}
+                          </ol>
+                        </div>
+                      </div>
+                    )}
+
+                    {item.clinical_warnings?.length > 0 && (
+                      <div className="warning-box">
+                        <strong><FaExclamationTriangle /> Lưu ý đặc biệt :</strong>
+                        <ul>
+                          {item.clinical_warnings.map((warning, i) => <li key={i}>{warning}</li>)}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
     </>
   );
