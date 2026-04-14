@@ -110,12 +110,15 @@ class User(Base):
 
     history = relationship("SearchHistory", back_populates="user", cascade="all, delete-orphan")
 
+def get_vn_time():
+    return datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=7))).replace(tzinfo=None)
+
 class SearchHistory(Base):
     __tablename__ = "searchhistory"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.user_id"))
     query = Column(Text, nullable=False)
-    created_at = Column(DateTime, default=datetime.datetime.now)
+    created_at = Column(DateTime, default=get_vn_time)
 
     user = relationship("User", back_populates="history")
