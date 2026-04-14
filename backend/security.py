@@ -8,11 +8,20 @@ logger = logging.getLogger("security_audit")
 
 # Tự động bắt các keyword injection phổ biến ở đầu vào
 SQLI_PATTERNS = [
-    r"(\b(UNION|SELECT|INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|TRUNCATE)\b)",
+    # 1. Các lệnh thao tác dữ liệu cơ bản (DML/DDL)
+    r"\b(UNION|SELECT|INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|TRUNCATE|EXEC|DECLARE)\b",
+    
+    # 2. Xử lý các phép so sánh Tautology (VD: OR 1=1, ' OR 'a'='a, AND "b"="b")
+    r"\b(OR|AND|XOR)\b\s*['\"]?\w+['\"]?\s*=\s*['\"]?\w+['\"]?",
+    
+    # 3. Phát hiện việc đóng chuỗi sớm (móc ngoặc đơn/kép) rồi thêm điều kiện logic (VD: ' OR, " OR)
+    r"['\"]\s*\b(OR|AND|XOR)\b",
+    
+    # 4. Ký tự comment trong SQL (-- hoặc /* */)
     r"(--|#|\/\*|\*\/)",
-    r"(\bor\b\s+1\s*=\s*1)",
-    r"(\bxor\b\s+1\s*=\s*1)",
-    r"(\band\b\s+1\s*=\s*1)"
+    
+    # 5. Ngăn chặn đa câu lệnh (; DROP TABLE)
+    r";\s*\b(UNION|SELECT|INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|TRUNCATE|EXEC|DECLARE)\b"
 ]
 
 def sanitize_and_check_input(symptom: str) -> str:
