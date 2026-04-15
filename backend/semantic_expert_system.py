@@ -8,12 +8,17 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# System Constants
+# Hybrid System Constants
 EXACT_MATCH_POINTS = 2.0
-ALIAS_MATCH_POINTS = 2.0
-CONFLICT_PENALTY = -5.0
-MULTI_MATCH_BONUS = 1.0
-MINIMUM_SCORE_THRESHOLD = 1.1
+ALIAS_MATCH_POINTS = 1.5
+W_KEYWORD = 1.0
+W_SEMANTIC = 0.5
+W_COVERAGE = 2.0
+W_CONSISTENCY = 1.5
+MISMATCH_PENALTY_WEIGHT = 1.0
+CONFLICT_PENALTY_VALUE = 5.0
+MIN_COVERAGE_THRESHOLD = 0.3  # Hard Rule 1
+SOFT_COVERAGE_THRESHOLD = 0.5 # Hard Rule 2
 
 CONFLICT_TAGS = {
     "han": ["nhiet"],
@@ -241,6 +246,7 @@ class SemanticExpertSystemEngine:
         # 1. Tokenize and Match Symptoms
         input_parts = split_input_parts(input_text)
         matched_symptoms = [] # List of {id, name, score, original, method}
+        ignored_symptoms = [] # List of parts that did not match anything
         detected_user_tags = set()
         normalized_symptoms_for_ui = []
 
@@ -284,6 +290,7 @@ class SemanticExpertSystemEngine:
                 logger.info(f"[INTERNAL-MATCH] Found match: '{part}' -> {self.symptoms[sid]['name']} via {method}")
             else:
                 # b. Partial match (keyword search) fallback
+                is_fallback_matched = False
                 for fallback_sid, data in self.symptoms.items():
                     if data["norm"] in norm_accent or norm_accent in data["norm"]:
                         match_info = {
@@ -303,7 +310,12 @@ class SemanticExpertSystemEngine:
                             "raw_inputs": [str(part)]
                         })
                         logger.info(f"[INTERNAL-MATCH] Found keyword match: '{part}' -> {data['name']}")
+                        is_fallback_matched = True
                         break
+                
+                if not is_fallback_matched:
+                    ignored_symptoms.append(str(part))
+                    logger.info(f"[INTERNAL-MATCH] Ignored invalid symptom: '{part}'")
             
             # Detect patient tags (han, nhiet, etc)
             for tag, keywords in CANONICAL_AXIS_RULES.items():
@@ -314,62 +326,83 @@ class SemanticExpertSystemEngine:
             logger.info("[INTERNAL-MATCH] No symptoms matched.")
             return []
 
-        # 2. Score All Patterns and find Candidates
+        valid_input_count = len(matched_symptoms)
+        if valid_input_count == 0:
+            logger.info("[INTERNAL-MATCH] No valid symptoms to score.")
+            return []
+
+        # 2. Score All Patterns and find Candidates (Hybrid Approach)
         all_pattern_results = []
         for pid, pattern in self.patterns.items():
             pattern_matches = [m for m in matched_symptoms if m["id"] in pattern["symptom_weights"]]
-            if not pattern_matches:
+            matched_count = len(pattern_matches)
+            if matched_count == 0:
                 continue
             
-            base_score = sum(m["score"] for m in pattern_matches)
+            # a. Symptom Coverage (Weighted Coverage)
+            # Fetch weights directly from the DB's pattern-symptom relation
+            matched_weight = sum(pattern["symptom_weights"][m["id"]] for m in pattern_matches)
+            unmatched_count = valid_input_count - matched_count
+            input_total_weight = matched_weight + (unmatched_count * 1.0) # Unmatched valid ones have weight 1.0
             
-            # Conflict Logic
+            coverage = matched_weight / input_total_weight if input_total_weight > 0 else 0
+            
+            # Hard Rule 1: Drop completely if coverage < 0.3
+            if coverage < MIN_COVERAGE_THRESHOLD:
+                continue
+
+            # b. Keyword vs Semantic Scores
+            keyword_score = sum([m["score"] for m in pattern_matches if m["method"] == "exact"])
+            semantic_score = sum([m["score"] for m in pattern_matches if m["method"] != "exact"])
+            
+            # c. Pattern Consistency
+            consistency_ratio = matched_count / valid_input_count
+            consistency_bonus = consistency_ratio * 2.0  # max 2.0
+            
+            # d. Mismatch & Conflict Penalty
             penalty = 0.0
+            penalty += unmatched_count * MISMATCH_PENALTY_WEIGHT
+            
+            has_conflict = False
             for tag, conflicts in CONFLICT_TAGS.items():
                 if tag in detected_user_tags:
                     if any(c in detected_user_tags for c in conflicts):
-                        penalty += CONFLICT_PENALTY
+                        has_conflict = True
                     if any(c in pattern["tags"] for c in conflicts):
-                        penalty += CONFLICT_PENALTY
+                        has_conflict = True
+                        
+            if has_conflict:
+                penalty += CONFLICT_PENALTY_VALUE
+                
+            # e. Calculate Final Score
+            raw_score = (
+                W_KEYWORD * keyword_score
+                + W_SEMANTIC * semantic_score
+                + W_COVERAGE * (coverage * 10)
+                + W_CONSISTENCY * consistency_bonus
+            ) - penalty
             
-            # Bonus
-            bonus = 0.0
-            if len(pattern_matches) / len(input_parts) >= 0.5 or len(pattern_matches) >= 3:
-                bonus = MULTI_MATCH_BONUS
-            
-            total_score = base_score + penalty + bonus
-            coverage = len(pattern_matches) / len(pattern["symptom_weights"]) if pattern["symptom_weights"] else 0
+            # Hard Rule 2: If coverage is between 0.3 and 0.5, apply a 0.5x modifier
+            if MIN_COVERAGE_THRESHOLD <= coverage < SOFT_COVERAGE_THRESHOLD:
+                raw_score *= 0.5
+                
+            # Theo yêu cầu fix gọn nhẹ
+            safe_raw_score = max(0.0, raw_score)
+            confidence_score = safe_raw_score / (safe_raw_score + penalty + 1.0)
+            final_percent = confidence_score * 100.0
             
             all_pattern_results.append({
                 "pattern": pattern,
-                "score": round(total_score, 2),
-                "base_score": base_score,
+                "score": final_percent / 100.0, # Keep score 0-1 range for internal fallback sorting
+                "confidence_percent": final_percent,
+                "base_score": keyword_score + semantic_score,
                 "penalty": penalty,
-                "bonus": bonus,
+                "bonus": consistency_bonus,
                 "matches": pattern_matches,
-                "coverage": round(coverage, 2)
+                "coverage": coverage,
+                "matched_weight": matched_weight,
+                "input_total_weight": input_total_weight
             })
-
-        # 2b. Fallback: If no patterns reach the high threshold but we have matches, 
-        # try a "Best effort" selection based just on match count.
-        is_best_effort = False
-        if not all_pattern_results and matched_symptoms:
-            logger.info("[INTERNAL-MATCH] No patterns met threshold. Swapping to best-effort mode.")
-            is_best_effort = True
-            for pid, pattern in self.patterns.items():
-                pattern_matches = [m for m in matched_symptoms if m["id"] in pattern["symptom_weights"]]
-                if pattern_matches:
-                    overlap_score = len(pattern_matches) / len(pattern["symptom_weights"]) if pattern["symptom_weights"] else 0
-                    all_pattern_results.append({
-                        "pattern": pattern,
-                        "score": 1.0 + overlap_score, # Minimal score to bypass threshold check later
-                        "base_score": overlap_score,
-                        "penalty": 0,
-                        "bonus": 0,
-                        "matches": pattern_matches,
-                        "coverage": round(overlap_score, 2)
-                    })
-            all_pattern_results.sort(key=lambda x: (len(x["matches"]), x["score"]), reverse=True)
 
         if not all_pattern_results:
             logger.info("[INTERNAL-MATCH] No patterns matched even in best-effort mode.")
@@ -394,8 +427,7 @@ class SemanticExpertSystemEngine:
         for curr_p in all_pattern_results:
             if len(results) >= top_k:
                 break
-            if curr_p["score"] < MINIMUM_SCORE_THRESHOLD and len(results) > 0:
-                break
+            # Hard Rule 1 drops bad coverage internally so we can just append top Ks
                 
             best_pattern = curr_p["pattern"]
             principles = self.pattern_principles.get(best_pattern["id"], [])
@@ -411,16 +443,27 @@ class SemanticExpertSystemEngine:
                 continue
 
             # Full response object
+            matched_count = len(curr_p["matches"])
             matched_names = list(set(m["name"] for m in curr_p["matches"]))
+            
+            # Determine suitability text
+            suitability_level = "Thấp"
+            if curr_p["confidence_percent"] >= 80:
+                suitability_level = "Cao"
+            elif curr_p["confidence_percent"] >= 60:
+                suitability_level = "Khá"
+            elif curr_p["confidence_percent"] >= 40:
+                suitability_level = "Trung bình"
+                
             reasoning_path = [
-                f"Phân tích {len(input_parts)} triệu chứng đầu vào.",
-                f"Phát hiện {len(curr_p['matches'])} triệu chứng khớp với bệnh cảnh '{best_pattern['name']}'.",
-                f"Điểm cơ sở: {curr_p['base_score']}"
+                f"Phân tích {valid_input_count} triệu chứng hợp lệ.",
+                f"Phát hiện {matched_count}/{valid_input_count} triệu chứng khớp với bệnh cảnh '{best_pattern['name']}'.",
+                f"Đạt độ bao phủ trọng số (weighted coverage): {curr_p['matched_weight']:.1f} / {curr_p['input_total_weight']:.1f}.",
             ]
-            if curr_p["penalty"] < 0:
-                reasoning_path.append(f"Áp dụng trừ điểm mâu thuẫn: {curr_p['penalty']}")
+            if curr_p["penalty"] > 0:
+                reasoning_path.append(f"Trừ điểm do có triệu chứng ngoại lai hoặc mâu thuẫn: -{curr_p['penalty']}")
             if curr_p["bonus"] > 0:
-                reasoning_path.append(f"Cộng điểm ưu tiên do độ phủ cao: {curr_p['bonus']}")
+                reasoning_path.append(f"Cộng điểm ưu tiên do độ đồng nhất cao: +{curr_p['bonus']:.2f}")
             
             reasoning_path.append(f"Xác định phép trị: {best_formula['phep_tri']}")
             reasoning_path.append(f"Đề xuất bài thuốc: {best_formula['name']}")
@@ -439,7 +482,7 @@ class SemanticExpertSystemEngine:
                     {
                         "symptom_id": str(m["id"]),
                         "symptom_name": str(m["name"]),
-                        "weight": 1.0, # Default if not specified
+                        "weight": best_pattern["symptom_weights"].get(m["id"], 1.0),
                         "contribution": m["score"],
                         "match_method": m["method"]
                     } for m in curr_p["matches"]
@@ -449,15 +492,23 @@ class SemanticExpertSystemEngine:
             results.append({
                 "name": best_formula["name"],
                 "category": "Cổ phương",
-                "confidence": round(min(0.99, curr_p["score"] / 10.0), 2),
+                "confidence": round(curr_p["score"], 2),
+                "confidence_percent": round(curr_p["confidence_percent"], 1),
                 "score": curr_p["score"],
                 "coverage": curr_p["coverage"],
+                "match_ratio": f"{matched_count}/{valid_input_count}",
+                "suitability_level": suitability_level,
                 "pattern": best_pattern["name"],
                 "principle": best_formula["phep_tri"],
                 "indications": best_formula["indications"],
                 "usage": "Sắc uống ngày một thang. Chia 2-3 lần uống trong ngày.",
+                "ignored_symptoms": ignored_symptoms,
                 "explain": {
-                    "reasoning": f"Hệ thống xác định đây là bài thuốc phù hợp nhất vì khớp với {len(curr_p['matches'])} triệu chứng lâm sàng chính ({', '.join(matched_names[:3])}...).",
+                    "reasoning": f"Hệ thống xác định bài thuốc phù hợp nhất vì khớp với {matched_count}/{valid_input_count} triệu chứng hợp lệ ({', '.join(matched_names[:3])}...). Độ phù hợp: {suitability_level} ({curr_p['confidence_percent']:.1f}%).\nTổng điểm ưu tiên (weight) thu được là {curr_p['matched_weight']:.1f}/{curr_p['input_total_weight']:.1f} điểm." + (
+                        f"\n\nCẢNH BÁO: Kết quả có phần thiếu chính xác do chưa đủ triệu chứng quan trọng." if curr_p['coverage'] < SOFT_COVERAGE_THRESHOLD else ""
+                    ) + (
+                        f"\nLưu ý: Đã tự động bỏ qua các dữ liệu input ảo/không xác định: {', '.join(ignored_symptoms)}." if ignored_symptoms else ""
+                    ),
                     "matched": matched_names,
                     "missing": missing_names[:5]
                 },
