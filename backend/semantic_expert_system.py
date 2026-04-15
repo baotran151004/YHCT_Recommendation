@@ -41,6 +41,11 @@ PATTERN_TAG_KEYWORDS = {
     "thuc": ["thuc", "uat", "tre", "be tac", "truong man", "ta thinh"],
 }
 
+SYMPTOM_PROPERTY_KEYWORDS = {
+    "heat": ["khô", "sốt", "khát", "ho khan", "nóng", "đỏ", "vàng", "táo bón", "nhiệt", "mồ hôi nhiều"],
+    "cold": ["sợ lạnh", "ớn lạnh", "không ra mồ hôi", "lạnh", "trắng", "tiêu lỏng", "hàn", "nhạt", "rét"]
+}
+
 def normalize_text(value: str, remove_accents: bool = False) -> str:
     """Normalize Vietnamese text for consistent matching."""
     if not value:
@@ -235,6 +240,18 @@ class SemanticExpertSystemEngine:
                 tags.add(tag)
         return tags
 
+    def _infer_symptom_nature(self, name: str) -> str:
+        norm_name = normalize_text(name, remove_accents=False).lower()
+        norm_plain = normalize_text(name, remove_accents=True).lower()
+        
+        for kw in SYMPTOM_PROPERTY_KEYWORDS["heat"]:
+            if kw in norm_name or normalize_text(kw, remove_accents=True) in norm_plain:
+                return "heat"
+        for kw in SYMPTOM_PROPERTY_KEYWORDS["cold"]:
+            if kw in norm_name or normalize_text(kw, remove_accents=True) in norm_plain:
+                return "cold"
+        return "neutral"
+
     def recommend(self, input_text: str, top_k: int = 1) -> List[dict]:
         """
         Main entry point for recommendation.
@@ -374,12 +391,32 @@ class SemanticExpertSystemEngine:
             if has_conflict:
                 penalty += CONFLICT_PENALTY_VALUE
                 
+            # Syndrome Property Layer (Heat/Cold)
+            heat_score = 0.0
+            cold_score = 0.0
+            for m in pattern_matches:
+                nature = self._infer_symptom_nature(m["name"])
+                weight = pattern["symptom_weights"][m["id"]]
+                if nature == "heat":
+                    heat_score += weight
+                elif nature == "cold":
+                    cold_score += weight
+                    
+            property_bonus = 0.0
+            if heat_score > cold_score:
+                if "nhiet" in pattern["tags"]: property_bonus += 2.0
+                if "han" in pattern["tags"]: property_bonus -= 3.0
+            elif cold_score > heat_score:
+                if "han" in pattern["tags"]: property_bonus += 2.0
+                if "nhiet" in pattern["tags"]: property_bonus -= 3.0
+                
             # e. Calculate Final Score
             raw_score = (
                 W_KEYWORD * keyword_score
                 + W_SEMANTIC * semantic_score
                 + W_COVERAGE * (coverage * 10)
                 + W_CONSISTENCY * consistency_bonus
+                + property_bonus
             ) - penalty
             
             # Hard Rule 2: If coverage is between 0.3 and 0.5, apply a 0.5x modifier
@@ -401,7 +438,9 @@ class SemanticExpertSystemEngine:
                 "matches": pattern_matches,
                 "coverage": coverage,
                 "matched_weight": matched_weight,
-                "input_total_weight": input_total_weight
+                "input_total_weight": input_total_weight,
+                "heat_score": heat_score,
+                "cold_score": cold_score
             })
 
         if not all_pattern_results:
@@ -465,6 +504,11 @@ class SemanticExpertSystemEngine:
             if curr_p["bonus"] > 0:
                 reasoning_path.append(f"Cộng điểm ưu tiên do độ đồng nhất cao: +{curr_p['bonus']:.2f}")
             
+            if curr_p["heat_score"] > curr_p["cold_score"]:
+                reasoning_path.append(f"Chẩn đoán thiên về THỂ NHIỆT (Điểm Nhiệt: {curr_p['heat_score']} > Hàn: {curr_p['cold_score']}).")
+            elif curr_p["cold_score"] > curr_p["heat_score"]:
+                reasoning_path.append(f"Chẩn đoán thiên về THỂ HÀN (Điểm Hàn: {curr_p['cold_score']} > Nhiệt: {curr_p['heat_score']}).")
+            
             reasoning_path.append(f"Xác định phép trị: {best_formula['phep_tri']}")
             reasoning_path.append(f"Đề xuất bài thuốc: {best_formula['name']}")
 
@@ -504,7 +548,9 @@ class SemanticExpertSystemEngine:
                 "usage": "Sắc uống ngày một thang. Chia 2-3 lần uống trong ngày.",
                 "ignored_symptoms": ignored_symptoms,
                 "explain": {
-                    "reasoning": f"Hệ thống xác định bài thuốc phù hợp nhất vì khớp với {matched_count}/{valid_input_count} triệu chứng hợp lệ ({', '.join(matched_names[:3])}...). Độ phù hợp: {suitability_level} ({curr_p['confidence_percent']:.1f}%).\nTổng điểm ưu tiên (weight) thu được là {curr_p['matched_weight']:.1f}/{curr_p['input_total_weight']:.1f} điểm." + (
+                    "reasoning": f"Hệ thống xác định bài thuốc phù hợp nhất vì khớp với {matched_count}/{valid_input_count} triệu chứng hợp lệ ({', '.join(matched_names[:3])}...). Độ phù hợp: {suitability_level} ({curr_p['confidence_percent']:.1f}%)." +
+                        (f"\nNghiêng về: {'Thể NHIỆT' if curr_p['heat_score'] > curr_p['cold_score'] else 'Thể HÀN' if curr_p['cold_score'] > curr_p['heat_score'] else 'Thể BÌNH HÒA'} (Điểm Nhiệt: {curr_p['heat_score']:.1f}, Điểm Hàn: {curr_p['cold_score']:.1f}).") +
+                        f"\nTổng điểm ưu tiên (weight) thu được là {curr_p['matched_weight']:.1f}/{curr_p['input_total_weight']:.1f} điểm." + (
                         f"\n\nCẢNH BÁO: Kết quả có phần thiếu chính xác do chưa đủ triệu chứng quan trọng." if curr_p['coverage'] < SOFT_COVERAGE_THRESHOLD else ""
                     ) + (
                         f"\nLưu ý: Đã tự động bỏ qua các dữ liệu input ảo/không xác định: {', '.join(ignored_symptoms)}." if ignored_symptoms else ""
