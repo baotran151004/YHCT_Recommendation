@@ -160,17 +160,21 @@ class SemanticExpertSystemEngine:
             self.alias_map[normalize_text(alias, remove_accents=True)] = sid
 
         # 2. Patterns
-        raw_patterns = self._query_rows(db, "SELECT pattern_id, pattern_name_vi, clinical_manifestations FROM syndromepattern")
+        raw_patterns = self._query_rows(db, "SELECT pattern_id, pattern_name_vi, clinical_manifestations, eight_principles FROM syndromepattern")
         for row in raw_patterns:
             pid = str(row["pattern_id"])
             name = str(row["pattern_name_vi"])
             manifest = str(row["clinical_manifestations"] or "")
+            eight_p = str(row.get("eight_principles") or "").lower()
+            
             self.patterns[pid] = {
                 "id": pid,
                 "name": name,
                 "manifestations": manifest,
                 "tags": self._infer_tags(name + " " + manifest),
-                "symptom_weights": {}
+                "symptom_weights": {},
+                "is_heat": "nhiệt" in eight_p,
+                "is_cold": "hàn" in eight_p
             }
 
         # 3. Pattern-Symptom Links
@@ -405,10 +409,10 @@ class SemanticExpertSystemEngine:
             property_bonus = 0.0
             if heat_score > cold_score:
                 if "nhiet" in pattern["tags"]: property_bonus += 2.0
-                if "han" in pattern["tags"]: property_bonus -= 3.0
+                if "han" in pattern["tags"] or pattern.get("is_cold"): property_bonus -= 3.0
             elif cold_score > heat_score:
                 if "han" in pattern["tags"]: property_bonus += 2.0
-                if "nhiet" in pattern["tags"]: property_bonus -= 3.0
+                if "nhiet" in pattern["tags"] or pattern.get("is_heat"): property_bonus -= 3.0
                 
             # e. Calculate Final Score
             raw_score = (
