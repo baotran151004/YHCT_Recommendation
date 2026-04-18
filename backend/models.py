@@ -58,6 +58,7 @@ class Symptom(Base):
 
     symptom_id = Column(String(50), primary_key=True)
     symptom_name = Column(String(200), nullable=False)
+    symptom_group = Column(String(100))
 
 class SymptomAlias(Base):
     __tablename__ = "symptomalias"
