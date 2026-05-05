@@ -49,10 +49,10 @@ SYMPTOM_PROPERTY_KEYWORDS = {
 }
 
 # Keywords to classify formulas and principles as heat-treating or cold-treating
-FORMULA_HEAT_KEYWORDS = ["phong nhiệt", "thanh nhiệt", "lương huyết", "giải độc", "tả hỏa", "thanh phế", "lương", "sơ phong thanh"]
+FORMULA_HEAT_KEYWORDS = ["phong nhiệt", "thanh nhiệt", "lương huyết", "giải độc", "tả hỏa", "thanh phế", "lương", "sơ phong thanh", "tân lương"]
 FORMULA_COLD_KEYWORDS = ["phong hàn", "ôn trung", "hồi dương", "ôn kinh", "tán hàn", "hồi dương cứu nghịch", "ôn bổ", "ôn hóa"]
 
-PRINCIPLE_HEAT_KEYWORDS = ["thanh nhiệt", "lương", "giải độc", "tả hỏa", "sơ phong thanh nhiệt", "thanh phế", "thanh can"]
+PRINCIPLE_HEAT_KEYWORDS = ["thanh nhiệt", "lương", "giải độc", "tả hỏa", "sơ phong thanh nhiệt", "thanh phế", "thanh can", "tân lương giải biểu", "tân lương"]
 PRINCIPLE_COLD_KEYWORDS = ["tán hàn", "ôn trung", "ôn kinh", "ôn bổ", "hồi dương", "khu phong tán hàn", "trừ phong tán hàn"]
 
 def normalize_text(value: str, remove_accents: bool = False) -> str:
@@ -222,17 +222,20 @@ class SemanticExpertSystemEngine:
                 "treats_cold": treats_cold,  # True = dùng để TRỊ bệnh Hàn (thuốc ấm)
             }
 
-        # 5. Principles per Pattern
+        # 5. Principles per Pattern (with priority ordering)
         raw_principles = self._query_rows(db, """
-            SELECT pp.pattern_id, tp.principle_name_vi, tp.principle_id
+            SELECT pp.pattern_id, tp.principle_name_vi, tp.principle_id, pp.priority_level
             FROM patternprinciple pp
             JOIN therapeuticprinciple tp ON tp.principle_id = pp.principle_id
+            ORDER BY pp.priority_level ASC NULLS LAST
         """)
         for row in raw_principles:
             self.pattern_principles[str(row["pattern_id"])].append({
                 "id": str(row["principle_id"]),
-                "name": row["principle_name_vi"]
+                "name": row["principle_name_vi"],
+                "priority": row.get("priority_level") or 99
             })
+
 
         # 6. Formulas per Principle
         raw_fp = self._query_rows(db, "SELECT principle_id, formula_id FROM formulaprinciple")
@@ -312,16 +315,16 @@ class SemanticExpertSystemEngine:
             else:
                 score = 5  # Neutral patient, all principles acceptable
             
-            scored_principles.append((score, p, formulas))
+            scored_principles.append((score, p.get("priority", 99), p, formulas))
         
         if not scored_principles:
             return None, None
         
-        # Sort by score descending
-        scored_principles.sort(key=lambda x: x[0], reverse=True)
+        # Sort by score descending, then by priority ascending (lower = more important)
+        scored_principles.sort(key=lambda x: (-x[0], x[1]))
         
         # Try to find a formula from the best-scored principles
-        for score, principle, formulas in scored_principles:
+        for score, _priority, principle, formulas in scored_principles:
             # Among this principle's formulas, also prefer nature-matching ones
             best_formula = None
             fallback_formula = None
@@ -349,7 +352,7 @@ class SemanticExpertSystemEngine:
                 return principle, chosen
         
         # Absolute fallback: return first principle with any formula (shouldn't happen normally)
-        for score, principle, formulas in scored_principles:
+        for score, _priority, principle, formulas in scored_principles:
             if formulas:
                 logger.warning(f"[SAFETY] Fallback formula selection for principle {principle['name']} - no nature-matched formula found")
                 return principle, formulas[0]

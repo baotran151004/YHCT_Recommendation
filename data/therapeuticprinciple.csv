@@ -1,4 +1,4 @@
-﻿principle_id,principle_name_vi,description,target_pathology,data_source
+principle_id,principle_name_vi,description,target_pathology,data_source
 TP001,Tán hàn,,,HƯỚNG DẪN CHẨN ĐOÁN VÀ ĐIỀU TRỊ BỆNH THEO Y HỌC CỔ TRUYỀN KẾT HỢP Y HỌC CỔ TRUYỀN VÀ Y HỌC HIỆN ĐẠI
 TP002,Trừ thấp,,,HƯỚNG DẪN CHẨN ĐOÁN VÀ ĐIỀU TRỊ BỆNH THEO Y HỌC CỔ TRUYỀN KẾT HỢP Y HỌC CỔ TRUYỀN VÀ Y HỌC HIỆN ĐẠI
 TP003,Ôn thông kinh lạc,,,HƯỚNG DẪN CHẨN ĐOÁN VÀ ĐIỀU TRỊ BỆNH THEO Y HỌC CỔ TRUYỀN KẾT HỢP Y HỌC CỔ TRUYỀN VÀ Y HỌC HIỆN ĐẠI
@@ -95,3 +95,4 @@ TP093,Trừ phong thấp,,,HƯỚNG DẪN CHẨN ĐOÁN VÀ ĐIỀU TRỊ BỆNH
 TP094,Hoạt lạc chỉ thống,,,HƯỚNG DẪN CHẨN ĐOÁN VÀ ĐIỀU TRỊ BỆNH THEO Y HỌC CỔ TRUYỀN KẾT HỢP Y HỌC CỔ TRUYỀN VÀ Y HỌC HIỆN ĐẠI
 TP095,Hoạt huyết thông lạc,,,HƯỚNG DẪN CHẨN ĐOÁN VÀ ĐIỀU TRỊ BỆNH THEO Y HỌC CỔ TRUYỀN KẾT HỢP Y HỌC CỔ TRUYỀN VÀ Y HỌC HIỆN ĐẠI
 TP096,Thanh nhiệt lợi thấp thoái hoàng,,,HƯỚNG DẪN CHẨN ĐOÁN VÀ ĐIỀU TRỊ BỆNH THEO Y HỌC CỔ TRUYỀN KẾT HỢP Y HỌC CỔ TRUYỀN VÀ Y HỌC HIỆN ĐẠI
+TP097,Tân lương giải biểu,Dùng vị thuốc cay mát (tân lương) để giải biểu nhiệt. Áp dụng khi ngoại cảm phong nhiệt xâm phạm phế vệ.,Phong nhiệt phạm phế vệ,Sách: ĐHY.Dược Học Cổ Truyền (NXB Y Học 2002) - Phạm Xuân Sinh / Hướng dẫn chẩn đoán BYT
