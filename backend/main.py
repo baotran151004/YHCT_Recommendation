@@ -93,7 +93,7 @@ def health_check() -> dict:
             "symptoms_count": len(expert_engine.symptoms),
             "patterns_count": len(expert_engine.patterns),
             "formulas_count": len(expert_engine.formulas),
-            "aliases_count": len(expert_engine.alias_entries),
+            "aliases_count": len(expert_engine.alias_map),
             "pattern_symptom_source": getattr(expert_engine, "pattern_symptom_source", "none"),
             "encoder_backend": getattr(expert_engine, "encoder_backend", "none"),
         }

@@ -48,6 +48,13 @@ SYMPTOM_PROPERTY_KEYWORDS = {
     "cold": ["sợ lạnh", "ớn lạnh", "không ra mồ hôi", "lạnh", "trắng", "tiêu lỏng", "hàn", "nhạt", "rét"]
 }
 
+# Keywords to classify formulas and principles as heat-treating or cold-treating
+FORMULA_HEAT_KEYWORDS = ["phong nhiệt", "thanh nhiệt", "lương huyết", "giải độc", "tả hỏa", "thanh phế", "lương", "sơ phong thanh"]
+FORMULA_COLD_KEYWORDS = ["phong hàn", "ôn trung", "hồi dương", "ôn kinh", "tán hàn", "hồi dương cứu nghịch", "ôn bổ", "ôn hóa"]
+
+PRINCIPLE_HEAT_KEYWORDS = ["thanh nhiệt", "lương", "giải độc", "tả hỏa", "sơ phong thanh nhiệt", "thanh phế", "thanh can"]
+PRINCIPLE_COLD_KEYWORDS = ["tán hàn", "ôn trung", "ôn kinh", "ôn bổ", "hồi dương", "khu phong tán hàn", "trừ phong tán hàn"]
+
 def normalize_text(value: str, remove_accents: bool = False) -> str:
     """Normalize Vietnamese text for consistent matching."""
     if not value:
@@ -193,15 +200,26 @@ class SemanticExpertSystemEngine:
             if pid in self.patterns:
                 self.patterns[pid]["symptom_weights"][sid] = float(row.get("weight") or 1.0)
 
-        # 4. Principles & Formulas
-        raw_formulas = self._query_rows(db, "SELECT formula_id, formula_name_vi, function_tcm, indications FROM formula")
+        # 4. Principles & Formulas (with Hàn/Nhiệt classification)
+        raw_formulas = self._query_rows(db, "SELECT formula_id, formula_name_vi, formula_category, function_tcm, indications FROM formula")
         for row in raw_formulas:
             fid = str(row["formula_id"])
+            category = normalize_text(str(row.get("formula_category") or ""))
+            function = normalize_text(str(row.get("function_tcm") or ""))
+            combined_text = category + " " + function
+
+            # Classify formula nature: does it TREAT heat or TREAT cold?
+            treats_heat = any(kw in combined_text for kw in FORMULA_HEAT_KEYWORDS)  # e.g. "thanh nhiệt" drugs
+            treats_cold = any(kw in combined_text for kw in FORMULA_COLD_KEYWORDS)  # e.g. "tán hàn" drugs
+
             self.formulas[fid] = {
                 "id": fid,
                 "name": row["formula_name_vi"],
+                "category": row.get("formula_category") or "",
                 "phep_tri": row["function_tcm"] or "Chưa rõ",
-                "indications": row["indications"]
+                "indications": row["indications"],
+                "treats_heat": treats_heat,  # True = dùng để TRỊ bệnh Nhiệt (thuốc mát)
+                "treats_cold": treats_cold,  # True = dùng để TRỊ bệnh Hàn (thuốc ấm)
             }
 
         # 5. Principles per Pattern
@@ -245,6 +263,98 @@ class SemanticExpertSystemEngine:
             if any(k in norm_text for k in keywords):
                 tags.add(tag)
         return tags
+
+    def _classify_principle_nature(self, principle_name: str) -> str:
+        """Classify a therapeutic principle as 'heat-treating', 'cold-treating', or 'neutral'."""
+        norm = normalize_text(principle_name)
+        if any(kw in norm for kw in PRINCIPLE_HEAT_KEYWORDS):
+            return "treats_heat"
+        if any(kw in norm for kw in PRINCIPLE_COLD_KEYWORDS):
+            return "treats_cold"
+        return "neutral"
+
+    def _select_best_principle_and_formula(self, principles: list, patient_is_heat: bool, patient_is_cold: bool) -> tuple:
+        """
+        Select the best principle and formula pair that matches the patient's Hàn/Nhiệt nature.
+        Returns (best_principle, best_formula) or (None, None) if nothing found.
+        
+        Clinical Rule:
+        - Patient is HEAT (Nhiệt) → prefer principles/formulas that TREAT heat (thanh nhiệt, lương...)
+        - Patient is COLD (Hàn) → prefer principles/formulas that TREAT cold (tán hàn, ôn...)
+        - NEVER give a cold-treating formula to a heat patient or vice versa.
+        """
+        if not principles:
+            return None, None
+
+        # Score each principle by relevance to patient nature
+        scored_principles = []
+        for p in principles:
+            nature = self._classify_principle_nature(p["name"])
+            formulas = self.principle_formulas.get(p["id"], [])
+            if not formulas:
+                continue  # Skip principles with no formulas
+            
+            score = 0
+            if patient_is_heat:
+                if nature == "treats_heat":
+                    score = 10  # Perfect match: heat patient, heat-treating principle
+                elif nature == "neutral":
+                    score = 5   # Acceptable
+                else:  # treats_cold
+                    score = -10  # DANGEROUS: cold-treating principle for heat patient
+            elif patient_is_cold:
+                if nature == "treats_cold":
+                    score = 10
+                elif nature == "neutral":
+                    score = 5
+                else:  # treats_heat
+                    score = -10
+            else:
+                score = 5  # Neutral patient, all principles acceptable
+            
+            scored_principles.append((score, p, formulas))
+        
+        if not scored_principles:
+            return None, None
+        
+        # Sort by score descending
+        scored_principles.sort(key=lambda x: x[0], reverse=True)
+        
+        # Try to find a formula from the best-scored principles
+        for score, principle, formulas in scored_principles:
+            # Among this principle's formulas, also prefer nature-matching ones
+            best_formula = None
+            fallback_formula = None
+            
+            for f in formulas:
+                if patient_is_heat:
+                    if f.get("treats_heat"):
+                        best_formula = f
+                        break
+                    elif not f.get("treats_cold"):
+                        fallback_formula = fallback_formula or f  # Neutral is okay
+                    # Skip cold-treating formulas for heat patients
+                elif patient_is_cold:
+                    if f.get("treats_cold"):
+                        best_formula = f
+                        break
+                    elif not f.get("treats_heat"):
+                        fallback_formula = fallback_formula or f
+                else:
+                    best_formula = f
+                    break
+            
+            chosen = best_formula or fallback_formula
+            if chosen:
+                return principle, chosen
+        
+        # Absolute fallback: return first principle with any formula (shouldn't happen normally)
+        for score, principle, formulas in scored_principles:
+            if formulas:
+                logger.warning(f"[SAFETY] Fallback formula selection for principle {principle['name']} - no nature-matched formula found")
+                return principle, formulas[0]
+        
+        return None, None
 
     def _infer_symptom_nature(self, name: str) -> str:
         norm_name = normalize_text(name, remove_accents=False).lower()
@@ -514,12 +624,16 @@ class SemanticExpertSystemEngine:
             best_pattern = curr_p["pattern"]
             principles = self.pattern_principles.get(best_pattern["id"], [])
             best_formula = None
+            best_principle = None
+            
+            # Determine patient's Hàn/Nhiệt nature from symptom analysis
+            patient_is_heat = curr_p["heat_score"] > curr_p["cold_score"]
+            patient_is_cold = curr_p["cold_score"] > curr_p["heat_score"]
             
             if principles:
-                best_principle = principles[0]
-                formulas = self.principle_formulas.get(best_principle["id"], [])
-                if formulas:
-                    best_formula = formulas[0]
+                best_principle, best_formula = self._select_best_principle_and_formula(
+                    principles, patient_is_heat, patient_is_cold
+                )
 
             if not best_formula:
                 continue
@@ -562,7 +676,9 @@ class SemanticExpertSystemEngine:
             elif curr_p["hit_important"]:
                 reasoning_path.append(f"Điểm cộng đặc biệt: Bệnh cảnh bao phủ chính xác các triệu chứng then chốt nhất của bệnh. (+30% điểm uy tín)")
             
-            reasoning_path.append(f"Xác định phép trị: {best_formula['phep_tri']}")
+            # Use principle name for treatment method display, fallback to formula function
+            display_principle_name = best_principle["name"] if best_principle else best_formula['phep_tri']
+            reasoning_path.append(f"Xác định phép trị: {display_principle_name}")
             reasoning_path.append(f"Đề xuất bài thuốc: {best_formula['name']}")
 
             # Find missing symptoms (symptoms in pattern but not in input)
@@ -596,7 +712,7 @@ class SemanticExpertSystemEngine:
                 "match_ratio": f"{matched_count}/{valid_input_count}",
                 "suitability_level": suitability_level,
                 "pattern": best_pattern["name"],
-                "principle": best_formula["phep_tri"],
+                "principle": display_principle_name,
                 "indications": best_formula["indications"],
                 "usage": "Sắc uống ngày một thang. Chia 2-3 lần uống trong ngày.",
                 "ignored_symptoms": ignored_symptoms,
@@ -617,7 +733,7 @@ class SemanticExpertSystemEngine:
                 "reasoning_path": reasoning_path,
                 "priority_layers": [
                     {"layer": "diagnostic", "label": "Biện chứng", "decision": best_pattern["name"], "rationale": f"Khớp {len(curr_p['matches'])} triệu chứng."},
-                    {"layer": "therapeutic", "label": "Pháp trị", "decision": best_formula["phep_tri"], "rationale": "Dựa trên thể bệnh đã xác định."}
+                    {"layer": "therapeutic", "label": "Pháp trị", "decision": display_principle_name, "rationale": f"Dựa trên thể bệnh {'NHIỆT' if patient_is_heat else 'HÀN' if patient_is_cold else 'BÌNH HÒA'} đã xác định."}
                 ],
                 "modifier": {tag: True for tag in detected_user_tags},
                 "selected_pattern": selected_pattern # Restored legacy field
